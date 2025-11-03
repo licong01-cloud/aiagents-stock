@@ -1,0 +1,42 @@
+/*.rar
+/test_akshare.py
+/test_fixed.py
+/test_pdf_export.py
+/test_pe_pb.py
+/venv
+/__pycache__
+# 环境变量文件
+.env
+/.cursor
+/openspec
+TradEnv/
+
+# Python caches and artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
+
+# Databases
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Backups
+backup_*/
+backup_*
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
