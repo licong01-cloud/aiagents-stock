@@ -41,13 +41,14 @@ class MarketSentimentDataFetcher:
     def __init__(self):
         self.arbr_period = 26  # ARBR计算周期
     
-    def get_market_sentiment_data(self, symbol, stock_data=None):
+    def get_market_sentiment_data(self, symbol, stock_data=None, analysis_date=None):
         """
         获取完整的市场情绪分析数据
         
         Args:
             symbol: 股票代码
             stock_data: 股票历史数据（如果已有）
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'
             
         Returns:
             dict: 包含各类市场情绪指标的字典
@@ -61,6 +62,8 @@ class MarketSentimentDataFetcher:
             "limit_up_down": None,      # 涨跌停数据
             "margin_trading": None,     # 融资融券数据
             "fear_greed_index": None,   # 市场恐慌贪婪指数
+            "market_volume": None,      # 大盘成交量分析
+            "index_daily_metrics": None,# 大盘指数每日指标
             "data_success": False
         }
         
@@ -87,6 +90,18 @@ class MarketSentimentDataFetcher:
                 if market_data:
                     sentiment_data["market_index"] = market_data
                 
+                # 3.1 获取大盘成交量分析
+                print("📊 正在分析大盘成交量...")
+                market_volume = self._get_market_volume_analysis(analysis_date=analysis_date)
+                if market_volume:
+                    sentiment_data["market_volume"] = market_volume
+                
+                # 3.2 获取大盘指数每日指标
+                print("📊 正在获取大盘指数每日指标...")
+                index_metrics = self._get_index_daily_metrics(analysis_date=analysis_date)
+                if index_metrics:
+                    sentiment_data["index_daily_metrics"] = index_metrics
+                
                 # 4. 获取涨跌停数据
                 print("📊 正在获取涨跌停数据...")
                 limit_data = self._get_limit_up_down_stats()
@@ -95,9 +110,12 @@ class MarketSentimentDataFetcher:
                 
                 # 5. 获取融资融券数据
                 print("📊 正在获取融资融券数据...")
-                margin_data = self._get_margin_trading_data(symbol)
+                margin_data = self._get_margin_trading_data(symbol, analysis_date=analysis_date)
                 if margin_data:
                     sentiment_data["margin_trading"] = margin_data
+                margin_history = self._get_margin_trading_history(symbol, days=5, analysis_date=analysis_date)
+                if margin_history:
+                    sentiment_data["margin_trading_history"] = margin_history
                 
                 # 6. 获取市场恐慌指数
                 print("📊 正在计算市场恐慌指数...")
@@ -117,6 +135,185 @@ class MarketSentimentDataFetcher:
             sentiment_data["error"] = str(e)
         
         return sentiment_data
+
+    def _get_market_volume_analysis(self, analysis_date=None):
+        """使用Tushare daily_info获取近10个交易日大盘成交量情况"""
+        if not data_source_manager.tushare_available:
+            print("   ⚠️ Tushare不可用，无法获取大盘成交量数据")
+            return None
+        
+        try:
+            print("   [Tushare] 获取daily_info数据...")
+            base_date = datetime.strptime(analysis_date, '%Y%m%d') if analysis_date else datetime.now()
+            end_date = base_date.strftime('%Y%m%d')
+            start_date = (base_date - timedelta(days=40)).strftime('%Y%m%d')
+            
+            with network_optimizer.apply():
+                df = data_source_manager.tushare_api.query(
+                    'daily_info',
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            
+            if df is None or df.empty:
+                print("   [Tushare] 未获取到daily_info数据")
+                return None
+            
+            df = df[df['ts_code'].isin(['SZ_MARKET', 'SH_MARKET'])].copy()
+            if df.empty:
+                print("   [Tushare] 未发现沪深两市合计数据")
+                return None
+            
+            df['trade_date'] = pd.to_datetime(df['trade_date'])
+            df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
+            df['vol'] = pd.to_numeric(df['vol'], errors='coerce')
+            grouped = df.groupby('trade_date').agg({'amount': 'sum', 'vol': 'sum'}).reset_index()
+            grouped = grouped.sort_values('trade_date')
+            last_days = grouped.tail(10)
+            if last_days.empty:
+                print("   [Tushare] 近10个交易日数据为空")
+                return None
+            
+            latest = last_days.iloc[-1]
+            previous = last_days.iloc[:-1]
+            avg_amount = previous['amount'].mean() if not previous.empty else None
+            avg_vol = previous['vol'].mean() if not previous.empty else None
+            amount_ratio = (latest['amount'] / avg_amount) if (avg_amount is not None and avg_amount != 0) else None
+            vol_ratio = (latest['vol'] / avg_vol) if (avg_vol is not None and avg_vol != 0) else None
+
+            def valid(value):
+                return value is not None and not pd.isna(value)
+
+            def classify_ratio(value):
+                if not valid(value):
+                    return "数据不足"
+                if value >= 1.05:
+                    return "放量"
+                if value <= 0.95:
+                    return "缩量"
+                return "持平"
+            
+            trend = classify_ratio(amount_ratio if valid(amount_ratio) else vol_ratio)
+            
+            daily_records = [
+                {
+                    "trade_date": row['trade_date'].strftime('%Y-%m-%d'),
+                    "total_amount": float(row['amount']) if pd.notna(row['amount']) else None,
+                    "total_volume": float(row['vol']) if pd.notna(row['vol']) else None,
+                }
+                for _, row in last_days.iterrows()
+            ]
+            
+            return {
+                "source": "tushare",
+                "unit": {
+                    "total_amount": "亿元",
+                    "total_volume": "亿股"
+                },
+                "records": daily_records,
+                "latest": daily_records[-1] if daily_records else None,
+                "average_amount": float(avg_amount) if valid(avg_amount) else None,
+                "average_volume": float(avg_vol) if valid(avg_vol) else None,
+                "amount_ratio": float(amount_ratio) if valid(amount_ratio) else None,
+                "volume_ratio": float(vol_ratio) if valid(vol_ratio) else None,
+                "trend": trend
+            }
+        except Exception as e:
+            print(f"   [Tushare] 获取大盘成交量数据失败: {e}")
+            return None
+
+    def _get_index_daily_metrics(self, analysis_date=None):
+        """获取重点指数每日指标"""
+        if not data_source_manager.tushare_available:
+            print("   ⚠️ Tushare不可用，无法获取指数每日指标")
+            return None
+        
+        index_map = {
+            '000001.SH': '上证综指',
+            '399001.SZ': '深证成指',
+            '000016.SH': '上证50',
+            '000905.SH': '中证500',
+            '399005.SZ': '中小板指',
+            '399006.SZ': '创业板指',
+        }
+        base_date = datetime.strptime(analysis_date, '%Y%m%d') if analysis_date else datetime.now()
+        end_date = base_date.strftime('%Y%m%d')
+        start_date = (base_date - timedelta(days=30)).strftime('%Y%m%d')
+        
+        results = {}
+        try:
+            for ts_code, name in index_map.items():
+                try:
+                    with network_optimizer.apply():
+                        df = data_source_manager.tushare_api.index_dailybasic(
+                            ts_code=ts_code,
+                            start_date=start_date,
+                            end_date=end_date,
+                        )
+                    if df is None or df.empty:
+                        continue
+                    df['trade_date'] = pd.to_datetime(df['trade_date'])
+                    df = df.sort_values('trade_date')
+                    latest = df[df['trade_date'] <= pd.to_datetime(end_date)]
+                    if latest.empty:
+                        latest = df
+                    latest_row = latest.iloc[-1]
+                    prev_row = latest.iloc[-2] if len(latest) > 1 else None
+
+                    def to_float(row, key):
+                        if row is None:
+                            return None
+                        val = row.get(key)
+                        return float(val) if pd.notna(val) else None
+
+                    def diff(cur_row, prev_row, key):
+                        cur = to_float(cur_row, key)
+                        prev = to_float(prev_row, key)
+                        if cur is None or prev is None:
+                            return None
+                        return cur - prev
+
+                    recent_records = []
+                    for _, row in df.tail(6).iterrows():
+                        recent_records.append({
+                            "trade_date": row['trade_date'].strftime('%Y-%m-%d'),
+                            "turnover_rate": to_float(row, 'turnover_rate'),
+                            "pe": to_float(row, 'pe'),
+                            "pb": to_float(row, 'pb')
+                        })
+                    results[ts_code] = {
+                        "index_name": name,
+                        "trade_date": latest_row['trade_date'].strftime('%Y-%m-%d'),
+                        "turnover_rate": to_float(latest_row, 'turnover_rate'),
+                        "turnover_rate_f": to_float(latest_row, 'turnover_rate_f'),
+                        "pe": to_float(latest_row, 'pe'),
+                        "pe_ttm": to_float(latest_row, 'pe_ttm'),
+                        "pb": to_float(latest_row, 'pb'),
+                        "total_mv": to_float(latest_row, 'total_mv'),
+                        "float_mv": to_float(latest_row, 'float_mv'),
+                        "total_share": to_float(latest_row, 'total_share'),
+                        "float_share": to_float(latest_row, 'float_share'),
+                        "free_share": to_float(latest_row, 'free_share'),
+                        "turnover_rate_change": diff(latest_row, prev_row, 'turnover_rate'),
+                        "pe_change": diff(latest_row, prev_row, 'pe'),
+                        "pb_change": diff(latest_row, prev_row, 'pb'),
+                        "turnover_rate_5d_avg": float(df['turnover_rate'].tail(5).mean()) if not df['turnover_rate'].tail(5).isna().all() else None,
+                        "pe_5d_avg": float(df['pe'].tail(5).mean()) if not df['pe'].tail(5).isna().all() else None,
+                        "pb_5d_avg": float(df['pb'].tail(5).mean()) if not df['pb'].tail(5).isna().all() else None,
+                        "recent_records": recent_records,
+                    }
+                except Exception as inner_e:
+                    print(f"   [Tushare] 获取指数 {ts_code} 数据失败: {inner_e}")
+                    continue
+            if not results:
+                return None
+            return {
+                "source": "tushare",
+                "indices": results
+            }
+        except Exception as e:
+            print(f"   [Tushare] 获取指数每日指标失败: {e}")
+            return None
     
     def _is_chinese_stock(self, symbol):
         """判断是否为中国股票"""
@@ -559,59 +756,181 @@ class MarketSentimentDataFetcher:
             print(f"获取涨跌停数据失败: {e}")
         return None
     
-    def _get_margin_trading_data(self, symbol):
+    def _get_margin_trading_data(self, symbol, analysis_date=None):
         """获取融资融券数据"""
         try:
-            # 获取个股融资融券数据（尝试多个API）
+            # 优先使用Tushare接口
+            if data_source_manager.tushare_available:
+                ts_code = data_source_manager._convert_to_ts_code(symbol)
+                base_date = datetime.strptime(analysis_date, '%Y%m%d') if analysis_date else datetime.now()
+
+                def to_float(value):
+                    try:
+                        if value is None:
+                            return None
+                        return float(value)
+                    except (TypeError, ValueError):
+                        return None
+
+                for days_back in range(7):
+                    trade_date = (base_date - timedelta(days=days_back)).strftime('%Y%m%d')
+                    try:
+                        with network_optimizer.apply():
+                            df = data_source_manager.tushare_api.margin(trade_date=trade_date, ts_code=ts_code)
+                        if df is not None and not df.empty:
+                            row = df.iloc[0]
+                            margin_balance = to_float(row.get('rzye'))
+                            short_balance = to_float(row.get('rqye'))
+                            margin_buy = to_float(row.get('rzmre'))
+                            margin_repay = to_float(row.get('rzche'))
+                            short_sell = to_float(row.get('rqmcl'))
+                            short_repay = to_float(row.get('rqchl'))
+
+                            interpretation = []
+                            if margin_balance is not None and short_balance not in (None, 0):
+                                ratio = margin_balance / short_balance if short_balance else None
+                                if ratio is not None:
+                                    if ratio > 10:
+                                        interpretation.append("融资余额远大于融券余额，投资者看多情绪强")
+                                    elif ratio > 3:
+                                        interpretation.append("融资余额明显高于融券余额，偏多情绪")
+                                    elif ratio < 1:
+                                        interpretation.append("融券余额超过融资余额，空头力量偏强")
+                                    else:
+                                        interpretation.append("融资融券相对平衡")
+                            else:
+                                interpretation.append("融资或融券余额缺失，无法判断多空力量")
+
+                            return {
+                                "margin_balance": margin_balance,
+                                "short_balance": short_balance,
+                                "margin_buy": margin_buy,
+                                "margin_repay": margin_repay,
+                                "short_sell": short_sell,
+                                "short_repay": short_repay,
+                                "interpretation": interpretation,
+                                "date": trade_date,
+                                "source": "tushare"
+                            }
+                    except Exception as te:
+                        print(f"   [Tushare] 融资融券接口失败: {te}")
+                        continue
+
+            # Tushare失败，尝试AKShare
             try:
-                # 方法1：获取沪深融资融券明细
+                exchange = 'sz'
+                if symbol.startswith(('6', '9')):
+                    exchange = 'sh'
+                fetch_fn = ak.stock_margin_underlying_info_szse if exchange == 'sz' else ak.stock_margin_underlying_info_sse
                 with network_optimizer.apply():
-                    df = ak.stock_margin_underlying_info_szse(date=datetime.now().strftime('%Y%m%d'))
+                    df = fetch_fn(date=datetime.now().strftime('%Y%m%d'))
                 if df is not None and not df.empty:
                     stock_data = df[df['证券代码'] == symbol]
                     if not stock_data.empty:
                         latest = stock_data.iloc[0]
-                        
                         margin_balance = latest.get('融资余额', 0)
                         short_balance = latest.get('融券余额', 0)
-                        
-                        # 解读融资融券
                         interpretation = []
-                        if margin_balance > short_balance * 10:
-                            interpretation.append("融资余额远大于融券余额，投资者看多情绪强")
-                        elif margin_balance > short_balance * 3:
-                            interpretation.append("融资余额大于融券余额，投资者偏看多")
-                        else:
-                            interpretation.append("融资融券相对平衡")
-                        
+                        if margin_balance and short_balance:
+                            if margin_balance > short_balance * 10:
+                                interpretation.append("融资余额远大于融券余额，投资者看多情绪强")
+                            elif margin_balance > short_balance * 3:
+                                interpretation.append("融资余额大于融券余额，投资者偏看多")
+                            elif margin_balance < short_balance:
+                                interpretation.append("融券余额高于融资余额，市场偏空")
+                            else:
+                                interpretation.append("融资融券相对平衡")
                         return {
                             "margin_balance": margin_balance,
                             "short_balance": short_balance,
-                            "interpretation": interpretation,
-                            "date": datetime.now().strftime('%Y-%m-%d')
+                            "interpretation": interpretation if interpretation else ["缺少参考值"],
+                            "date": datetime.now().strftime('%Y-%m-%d'),
+                            "source": f"akshare-{exchange}"
                         }
-            except:
-                pass
-            
-            # 方法2：获取融资融券汇总数据
+            except Exception as ak_e:
+                print(f"   [Akshare] 获取融资融券数据失败: {ak_e}")
+
+            # 兜底：获取整体汇总
             try:
                 with network_optimizer.apply():
                     df = ak.stock_margin_szsh()
                 if df is not None and not df.empty:
-                    # 获取最新数据
                     latest = df.iloc[-1]
                     return {
                         "margin_balance": latest.get('融资余额', 'N/A'),
                         "short_balance": latest.get('融券余额', 'N/A'),
-                        "interpretation": ["市场整体融资融券数据"],
-                        "date": latest.get('交易日期', 'N/A')
+                        "interpretation": ["使用市场整体融资融券数据（个股数据缺失）"],
+                        "date": latest.get('交易日期', 'N/A'),
+                        "source": "akshare-summary"
                     }
-            except:
-                pass
-                
+            except Exception as summary_e:
+                print(f"   [Akshare] 获取汇总融资融券数据失败: {summary_e}")
+
         except Exception as e:
             print(f"获取融资融券数据失败: {e}")
         return None
+
+    def _get_margin_trading_history(self, symbol, days=5, analysis_date=None):
+        """获取近N个交易日融资融券历史数据"""
+        if not data_source_manager.tushare_available:
+            print("   ⚠️ Tushare不可用，无法获取融资融券历史数据")
+            return None
+
+        try:
+            ts_code = data_source_manager._convert_to_ts_code(symbol)
+            base_date = datetime.strptime(analysis_date, '%Y%m%d') if analysis_date else datetime.now()
+            end_date = base_date.strftime('%Y%m%d')
+            start_date = (base_date - timedelta(days=days * 3)).strftime('%Y%m%d')
+
+            with network_optimizer.apply():
+                df = data_source_manager.tushare_api.margin_detail(
+                    ts_code=ts_code,
+                    start_date=start_date,
+                    end_date=end_date
+                )
+
+            if df is None or df.empty:
+                print("   [Tushare] 未获取到融资融券历史数据")
+                return None
+
+            df['trade_date'] = pd.to_datetime(df['trade_date'])
+            df = df.sort_values('trade_date').tail(days)
+
+            records = []
+            for _, row in df.iterrows():
+                records.append({
+                    "trade_date": row['trade_date'].strftime('%Y-%m-%d'),
+                    "margin_balance": float(row.get('rzye', 0)) if pd.notna(row.get('rzye')) else None,
+                    "margin_buy": float(row.get('rzmre', 0)) if pd.notna(row.get('rzmre')) else None,
+                    "margin_repay": float(row.get('rzche', 0)) if pd.notna(row.get('rzche')) else None,
+                    "short_balance": float(row.get('rqye', 0)) if pd.notna(row.get('rqye')) else None,
+                    "short_sell": float(row.get('rqmcl', 0)) if pd.notna(row.get('rqmcl')) else None,
+                    "short_repay": float(row.get('rqchl', 0)) if pd.notna(row.get('rqchl')) else None,
+                    "net_margin_buy": float(row.get('rzmre', 0) - row.get('rzche', 0)) if pd.notna(row.get('rzmre')) and pd.notna(row.get('rzche')) else None,
+                    "net_short_sell": float(row.get('rqmcl', 0) - row.get('rqchl', 0)) if pd.notna(row.get('rqmcl')) and pd.notna(row.get('rqchl')) else None,
+                })
+
+            def calc_change(field):
+                values = [rec[field] for rec in records if rec[field] is not None]
+                if len(values) >= 2:
+                    return values[-1] - values[0]
+                return None
+
+            summary = {
+                "source": "tushare",
+                "records": records,
+                "first_date": records[0]['trade_date'] if records else None,
+                "last_date": records[-1]['trade_date'] if records else None,
+                "margin_balance_change": calc_change('margin_balance'),
+                "short_balance_change": calc_change('short_balance'),
+                "net_margin_buy_total": sum(rec['net_margin_buy'] for rec in records if rec['net_margin_buy'] is not None),
+                "net_short_sell_total": sum(rec['net_short_sell'] for rec in records if rec['net_short_sell'] is not None),
+            }
+
+            return summary
+        except Exception as e:
+            print(f"获取融资融券历史数据失败: {e}")
+            return None
     
     def _get_fear_greed_index(self):
         """计算市场恐慌贪婪指数（基于多个指标综合计算）"""
@@ -698,6 +1017,21 @@ ARBR统计数据：
 - 历史卖出信号比例：{arbr.get('signal_statistics', {}).get('sell_ratio', 'N/A')}
 """)
         
+        def format_number(value, unit=None):
+            if value is None or pd.isna(value):
+                return "N/A"
+            if isinstance(value, (int, float)):
+                if abs(value) >= 1e12:
+                    text = f"{value / 1e12:.2f}万亿"
+                elif abs(value) >= 1e8:
+                    text = f"{value / 1e8:.2f}亿"
+                else:
+                    text = f"{value:,.2f}"
+                if unit and not text.endswith(unit):
+                    text += unit
+                return text
+            return str(value)
+
         # 换手率
         if sentiment_data.get("turnover_rate"):
             turnover = sentiment_data["turnover_rate"]
@@ -706,6 +1040,15 @@ ARBR统计数据：
 - 当前换手率：{turnover.get('current_turnover_rate', 'N/A')}%
 - 解读：{turnover.get('interpretation', 'N/A')}
 """)
+
+        def format_margin_record(record):
+            return (
+                f"  * {record.get('trade_date', 'N/A')}: "
+                f"融资余额 {format_number(record.get('margin_balance'))}元，"
+                f"净融资买入 {format_number(record.get('net_margin_buy'))}元，"
+                f"融券余额 {format_number(record.get('short_balance'))}元，"
+                f"净融券卖出 {format_number(record.get('net_short_sell'))}元"
+            )
         
         # 大盘情绪
         if sentiment_data.get("market_index"):
@@ -723,6 +1066,29 @@ ARBR统计数据：
 - 市场情绪：{market.get('sentiment_interpretation', 'N/A')}
 """)
         
+        # 大盘成交量分析
+        if sentiment_data.get("market_volume"):
+            volume = sentiment_data["market_volume"]
+            latest = volume.get("latest", {})
+            text_parts.append(f"""
+【大盘成交量分析】
+- 数据来源：{volume.get('source', 'tushare')}
+- 最近交易日：{latest.get('trade_date', 'N/A')}
+- 总成交额：{format_number(latest.get('total_amount'), '亿元')}
+- 总成交量：{format_number(latest.get('total_volume'), '亿股')}
+- 近10日平均成交额：{format_number(volume.get('average_amount'), '亿元')}
+- 当前成交额/均值：{volume.get('amount_ratio', 'N/A') if volume.get('amount_ratio') is not None else 'N/A'}
+- 趋势判断：{volume.get('trend', 'N/A')}（>1.05视为放量，<0.95视为缩量）
+""")
+
+            records = volume.get("records", [])
+            if records:
+                text_parts.append("近10个交易日成交额/量概览：")
+                for rec in records[-10:]:
+                    text_parts.append(
+                        f"  * {rec['trade_date']}：成交额 {format_number(rec.get('total_amount'), '亿元')}，成交量 {format_number(rec.get('total_volume'), '亿股')}"
+                    )
+
         # 涨跌停统计
         if sentiment_data.get("limit_up_down"):
             limit = sentiment_data["limit_up_down"]
@@ -737,13 +1103,32 @@ ARBR统计数据：
         # 融资融券
         if sentiment_data.get("margin_trading"):
             margin = sentiment_data["margin_trading"]
+            interpretation_text = '; '.join(margin.get('interpretation', [])) if margin.get('interpretation') else 'N/A'
             text_parts.append(f"""
-【融资融券数据】
-- 融资余额：{margin.get('margin_balance', 'N/A')}元
-- 融券余额：{margin.get('short_balance', 'N/A')}元
-- 融资买入额：{margin.get('margin_buy', 'N/A')}元
-- 解读：{'; '.join(margin.get('interpretation', []))}
+【融资融券数据】（来源：{margin.get('source', 'unknown')}）
+- 数据日期：{margin.get('date', 'N/A')}
+- 融资余额：{format_number(margin.get('margin_balance'))}元
+- 融券余额：{format_number(margin.get('short_balance'))}元
+- 当日融资买入/偿还：{format_number(margin.get('margin_buy'))} / {format_number(margin.get('margin_repay'))}
+- 当日融券卖出/偿还：{format_number(margin.get('short_sell'))} / {format_number(margin.get('short_repay'))}
+- 解读：{interpretation_text}
 """)
+
+        # 融资融券历史
+        if sentiment_data.get("margin_trading_history"):
+            history = sentiment_data["margin_trading_history"]
+            records = history.get('records', [])
+            text_parts.append(f"""
+【融资融券历史（近5个交易日）】（来源：{history.get('source', 'tushare')}）
+- 观察区间：{history.get('first_date', 'N/A')} ~ {history.get('last_date', 'N/A')}
+- 融资余额变化：{format_number(history.get('margin_balance_change'))}元
+- 融券余额变化：{format_number(history.get('short_balance_change'))}元
+- 净融资买入合计：{format_number(history.get('net_margin_buy_total'))}元
+- 净融券卖出合计：{format_number(history.get('net_short_sell_total'))}元
+""")
+
+            for rec in records:
+                text_parts.append(format_margin_record(rec))
         
         # 恐慌贪婪指数
         if sentiment_data.get("fear_greed_index"):
@@ -754,6 +1139,43 @@ ARBR统计数据：
 - 情绪等级：{fear_greed.get('level', 'N/A')}
 - 解读：{fear_greed.get('interpretation', 'N/A')}
 """)
+
+        # 指数每日指标
+        if sentiment_data.get("index_daily_metrics"):
+            metrics = sentiment_data["index_daily_metrics"]
+            indices = metrics.get('indices', {})
+            if indices:
+                text_parts.append("""
+【重点指数每日指标】
+- 指数涵盖：上证综指、深证成指、上证50、中证500、中小板指、创业板指
+- 指标说明：turnover_rate(换手率)、pe/pb(估值)、total_mv(总市值)、float_mv(流通市值)
+""")
+
+                def change_text(value):
+                    if value is None or pd.isna(value):
+                        return "持平"
+                    if abs(value) < 1e-4:
+                        return "持平"
+                    arrow = "↑" if value > 0 else "↓"
+                    return f"{arrow}{abs(value):.2f}"
+
+                for code, info in indices.items():
+                    text_parts.append(
+                        f"  * {info.get('index_name', code)}（{info.get('trade_date', 'N/A')}）\n"
+                        f"    - 换手率：{format_number(info.get('turnover_rate'))}%（较前日{change_text(info.get('turnover_rate_change'))}） / 自由换手率：{format_number(info.get('turnover_rate_f'))}%\n"
+                        f"      近5日均值：{format_number(info.get('turnover_rate_5d_avg'))}%\n"
+                        f"    - 估值：PE {format_number(info.get('pe'))}（较前日{change_text(info.get('pe_change'))}）/ PE(TTM) {format_number(info.get('pe_ttm'))} / PB {format_number(info.get('pb'))}（较前日{change_text(info.get('pb_change'))}）\n"
+                        f"      近5日均值：PE {format_number(info.get('pe_5d_avg'))} / PB {format_number(info.get('pb_5d_avg'))}\n"
+                        f"    - 市值：总市值 {format_number(info.get('total_mv'))} / 流通市值 {format_number(info.get('float_mv'))}"
+                    )
+
+                    recent = info.get('recent_records', [])
+                    if recent:
+                        text_parts.append("    - 最近走势：")
+                        for rec in recent[-5:]:
+                            text_parts.append(
+                                f"       · {rec.get('trade_date', 'N/A')} | 换手率 {format_number(rec.get('turnover_rate'))}% | PE {format_number(rec.get('pe'))} | PB {format_number(rec.get('pb'))}"
+                            )
         
         return "\n".join(text_parts)
 

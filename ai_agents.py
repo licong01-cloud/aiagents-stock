@@ -4,6 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 from debug_logger import debug_logger
+from datetime import datetime
 
 class StockAnalysisAgents:
     """股票分析AI智能体集合"""
@@ -88,6 +89,8 @@ class StockAnalysisAgents:
         # 如果有资金流向数据，显示数据来源
         if fund_flow_data and fund_flow_data.get('data_success'):
             print("   ✓ 已获取资金流向数据（akshare数据源）")
+            if fund_flow_data.get('margin_trading_history'):
+                print("   ✓ 已获取融资融券历史数据（统一数据访问模块）")
         else:
             print("   ⚠ 未获取到资金流向数据，将基于技术指标分析")
         
@@ -104,15 +107,20 @@ class StockAnalysisAgents:
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }
     
-    def risk_management_agent(self, stock_info: Dict, indicators: Dict, risk_data: Dict = None) -> Dict[str, Any]:
+    def risk_management_agent(self, stock_info: Dict, indicators: Dict, risk_data: Dict = None, fund_flow_data: Dict = None) -> Dict[str, Any]:
         """风险管理智能体（增强版）"""
         print("⚠️ 风险管理师正在评估中...")
         
         # 如果有风险数据，显示数据来源
         if risk_data and risk_data.get('data_success'):
-            print("   ✓ 已获取问财风险数据（限售解禁、大股东减持、重要事件）")
+            print("   ✓ 已获取统一数据接口风险数据（Tushare：限售解禁、股东增减持、重要公告）")
         else:
             print("   ⚠ 未获取到风险数据，将基于基本信息分析")
+
+        if fund_flow_data and fund_flow_data.get('data_success'):
+            print("   ✓ 已获取流动性参考数据（统一数据接口资金流向）")
+        else:
+            print("   ℹ️ 未获取到资金流向参考数据，流动性分析将基于其他指标")
         
         time.sleep(1)
         
@@ -124,12 +132,15 @@ class StockAnalysisAgents:
             fetcher = RiskDataFetcher()
             risk_data_text = f"""
 
-【实际风险数据】（来自问财）
+【实际风险数据】（统一数据访问模块 / Tushare）
 {fetcher.format_risk_data_for_ai(risk_data)}
 
-以上是通过问财（pywencai）获取的实际风险数据，请重点关注这些数据进行深度风险分析。
+以上风险数据已通过统一数据访问模块预先获取（Tushare官方接口），请基于这些实际数据进行深度风险分析。
 """
         
+        liquidity_metrics = risk_data.get('liquidity_metrics') if risk_data else None
+        liquidity_text = self._build_liquidity_context(fund_flow_data, liquidity_metrics)
+
         risk_prompt = f"""
 作为资深风险管理专家，请基于以下信息进行全面深度的风险评估：
 
@@ -146,8 +157,9 @@ class StockAnalysisAgents:
 - 布林带位置：当前价格相对于上下轨的位置
 - 波动率指标等
 {risk_data_text}
+{liquidity_text}
 
-⚠️ 重要提示：以上风险数据是从问财（pywencai）实时查询的完整原始数据，请你：
+⚠️ 重要提示：以上风险数据全部来自统一数据访问模块（Tushare官方接口），请你：
 1. 仔细解析每一条记录的所有字段信息
 2. 识别数据中的关键风险点（时间、规模、频率、股东身份等）
 3. 对数据进行深度分析，不要遗漏任何重要信息
@@ -195,6 +207,7 @@ class StockAnalysisAgents:
    - 买卖盘深度评估
    - 流动性枯竭风险
    - 大额交易影响评估
+   - 结合以上资金流向参考数据，判断主力资金动向对流动性的影响
 
 7. **波动性风险**
    - 价格波动幅度分析
@@ -240,12 +253,179 @@ class StockAnalysisAgents:
         
         return {
             "agent_name": "风险管理师",
-            "agent_role": "负责风险识别、风险评估、风险控制策略制定",
+            "agent_role": "识别并评估多维风险，提供风险控制建议", 
             "analysis": analysis,
-            "focus_areas": ["限售解禁风险", "股东减持风险", "重要事件风险", "风险识别", "风险量化", "风险控制", "资产配置"],
-            "risk_data": risk_data,  # 保存风险数据以供后续使用
+            "focus_areas": ["限售解禁", "股东减持", "重大事件", "系统性风险", "操作建议"],
+            "risk_data": risk_data,
+            "fund_flow_data": fund_flow_data,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }
+
+    def _build_liquidity_context(self, fund_flow_data: Dict[str, Any], liquidity_metrics: Dict[str, Any]) -> str:
+        section_title = "\n【流动性参考数据】"
+        lines = [section_title]
+
+        core = None
+        if fund_flow_data and fund_flow_data.get('data_success'):
+            if isinstance(fund_flow_data, dict):
+                core = fund_flow_data.get('fund_flow_data') or fund_flow_data.get('fund_flow')
+            if core and isinstance(core, dict):
+                records = core.get('data') or core.get('records')
+            else:
+                records = None
+        else:
+            records = None
+
+        def parse_date(value):
+            if value is None:
+                return None
+            candidates = ["%Y-%m-%d", "%Y%m%d", "%Y/%m/%d"]
+            val = str(value)
+            val = val.strip()
+            if not val:
+                return None
+            for fmt in candidates:
+                try:
+                    return datetime.strptime(val, fmt)
+                except Exception:
+                    continue
+            return None
+
+        def to_float(val):
+            if val is None:
+                return None
+            if isinstance(val, (int, float)):
+                return float(val)
+            try:
+                text = str(val).replace(',', '').replace('%', '').strip()
+                if not text:
+                    return None
+                return float(text)
+            except Exception:
+                return None
+
+        def pick(item: Dict[str, Any], keys):
+            for key in keys:
+                if key in item and item[key] not in (None, ""):
+                    value = to_float(item[key])
+                    if value is not None:
+                        return value
+            return None
+
+        fund_flow_lines = []
+        parsed_records = []
+        if records:
+            for item in records:
+                if not isinstance(item, dict):
+                    continue
+                dt = None
+                for key in ('trade_date', '日期', 'date', 'DAY'):
+                    if key in item:
+                        dt = parse_date(item[key])
+                        if dt:
+                            break
+                if dt is None:
+                    continue
+                parsed_records.append((dt, item))
+
+        if parsed_records:
+            parsed_records.sort(key=lambda x: x[0], reverse=True)
+        
+        has_fund_flow = bool(parsed_records)
+
+        def fmt_amount(value):
+            if value is None:
+                return "N/A"
+            if abs(value) >= 1e8:
+                return f"{value / 1e8:.2f}亿元"
+            if abs(value) >= 1e4:
+                return f"{value / 1e4:.2f}亿元"
+            return f"{value:.2f}万元"
+
+        def fmt_ratio(value):
+            if value is None:
+                return "N/A"
+            return f"{value:.2f}%"
+
+        if has_fund_flow:
+            latest_date, latest_item = parsed_records[0]
+            recent_window = parsed_records[:5]
+
+            main_keys = [
+                '主力净流入-净额(万元)',
+                '主力净流出-净额(万元)',
+                'net_amount_main',
+                'net_mf_amount',
+                'net_amount',
+            ]
+            total_amount_keys = [
+                '成交额',
+                '成交额(万元)',
+                '成交额-总额(万元)',
+                'amount',
+                'total_amount',
+            ]
+            ratio_keys = [
+                '主力净流入-净占比(%)',
+                '净流入占比(%)',
+                'net_mf_rate',
+                'net_rate',
+            ]
+
+            latest_main = pick(latest_item, main_keys)
+            latest_turnover = pick(latest_item, total_amount_keys)
+            latest_ratio = pick(latest_item, ratio_keys)
+
+            window_values = [pick(item, main_keys) for _, item in recent_window]
+            window_values = [v for v in window_values if v is not None]
+            avg_main = sum(window_values) / len(window_values) if window_values else None
+            pos_days = sum(1 for v in window_values if v and v > 0)
+
+            min_date = parsed_records[-1][0]
+            max_date = parsed_records[0][0]
+            source_text = fund_flow_data.get('source') or core.get('source') or '未知'
+
+            fund_flow_lines.append(f"资金流向数据来源：{source_text}（统一数据访问模块预先获取）")
+            fund_flow_lines.append(f"覆盖区间：{min_date.strftime('%Y-%m-%d')} ~ {max_date.strftime('%Y-%m-%d')}，共 {len(parsed_records)} 个交易日")
+            fund_flow_lines.append(
+                f"最新交易日 {latest_date.strftime('%Y-%m-%d')}：主力净流入 {fmt_amount(latest_main)}，总成交额 {fmt_amount(latest_turnover)}，主力净流入占比 {fmt_ratio(latest_ratio)}"
+            )
+            if avg_main is not None:
+                fund_flow_lines.append(
+                    f"近5日主力净流入均值 {fmt_amount(avg_main)}，净流入天数 {pos_days}/{len(window_values) if window_values else 5}"
+                )
+            if latest_turnover not in (None, 0) and latest_main not in (None, 0):
+                liquidity_ratio = latest_main / latest_turnover * 100
+                fund_flow_lines.append(f"主力净流入占成交额比重约 {fmt_ratio(liquidity_ratio)}")
+
+        if liquidity_metrics and liquidity_metrics.get('has_data'):
+            latest_liq = liquidity_metrics.get('latest', {})
+            lines.append(
+                f"成交量与换手率（Tushare daily/daily_basic）：最新 {latest_liq.get('trade_date', 'N/A')} | "
+                f"换手率 {fmt_ratio(latest_liq.get('turnover_rate'))} | 成交量 {fmt_amount(latest_liq.get('volume'))}股 | 成交额 {fmt_amount(latest_liq.get('amount'))}元"
+            )
+            if liquidity_metrics.get('volume_avg_5d') is not None:
+                lines.append(
+                    f"5日平均成交量 {fmt_amount(liquidity_metrics.get('volume_avg_5d'))}股，较前5日变化 {fmt_ratio(liquidity_metrics.get('volume_change_pct_prev'))}"
+                )
+            lines.append("近5日成交概览：")
+            for rec in liquidity_metrics.get('records', [])[:5]:
+                lines.append(
+                    f"  - {rec.get('trade_date')} | 换手率 {fmt_ratio(rec.get('turnover_rate'))} | 成交量 {fmt_amount(rec.get('volume'))}股 | 日变动 {fmt_ratio(rec.get('volume_change_pct'))}"
+                )
+        else:
+            lines.append("未获取到换手率/成交量数据，请结合市场成交统计评估流动性风险。")
+
+        if fund_flow_lines:
+            lines.append("")
+            lines.extend(fund_flow_lines)
+        elif not has_fund_flow:
+            lines.append("未获取到统一数据接口资金流向数据，资金面流动性需结合其他指标判断。")
+
+        lines.append("请结合成交量、换手率与主力资金变化，评估流动性风险及潜在压力。")
+        lines.append("")
+
+        return "\n".join(lines)
     
     def market_sentiment_agent(self, stock_info: Dict, sentiment_data: Dict = None) -> Dict[str, Any]:
         """市场情绪分析智能体"""
@@ -270,7 +450,7 @@ class StockAnalysisAgents:
 【市场情绪实际数据】
 {fetcher.format_sentiment_data_for_ai(sentiment_data)}
 
-以上是通过akshare获取的实际市场情绪数据，请重点基于这些数据进行分析。
+以上数据来自统一数据访问模块（Tushare优先、Akshare备用），请结合这些客观数据进行分析。
 """
         
         sentiment_prompt = f"""
@@ -298,21 +478,26 @@ class StockAnalysisAgents:
 
 3. **整体市场情绪**
    - 大盘涨跌情况对个股的影响
-   - 市场涨跌家数反映的整体情绪
-   - 涨跌停数量反映的市场热度
-   - 恐慌贪婪指数的启示
+   - 市场成交量是放量还是缩量，并分析成因
+   - 市场涨跌家数、涨跌停数量反映的整体情绪
+   - 恐慌贪婪指数带来的信号
 
-4. **资金情绪**
+4. **重点指数指标分析**
+   - 上证综指、深证成指、上证50、中证500、中小板指、创业板指的PE/PB、换手率、总市值表现
+   - 对比历史平均水平或相互之间的差异，判断指数估值是否偏高/偏低
+   - 指出指数指标对市场风险偏好和结构性机会的启示
+
+5. **资金情绪**
    - 融资融券数据反映的看多看空情绪
    - 主力资金动向
    - 市场流动性状况
 
-5. **情绪对股价影响**
+6. **情绪对股价影响**
    - 当前情绪对股价的支撑或压制作用
    - 情绪反转的可能性和信号
    - 短期情绪波动风险
 
-6. **投资建议**
+7. **投资建议**
    - 基于市场情绪的操作建议
    - 情绪面的机会和风险提示
 
@@ -325,6 +510,66 @@ class StockAnalysisAgents:
         ]
         
         analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+
+        # 在报告头部打印本次分析使用的数据来源与关键摘要
+        if sentiment_data and sentiment_data.get('data_success'):
+            def fmt(value, suffix=""):
+                if value is None:
+                    return "N/A"
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    return str(value)
+                if abs(value) >= 1e12:
+                    text = f"{value / 1e12:.2f}万亿"
+                elif abs(value) >= 1e8:
+                    text = f"{value / 1e8:.2f}亿"
+                else:
+                    text = f"{value:,.2f}"
+                return text + suffix
+
+            def fmt_change(value, suffix=""):
+                if value is None:
+                    return "持平"
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    return str(value)
+                if abs(value) < 1e-4:
+                    return "持平"
+                arrow = "↑" if value > 0 else "↓"
+                return f"{arrow}{abs(value):.2f}{suffix}"
+
+            header_lines = ["【数据来源（统一数据访问模块）】"]
+
+            mv = sentiment_data.get('market_volume')
+            if mv:
+                latest = mv.get('latest', {})
+                header_lines.append(
+                    f"- 大盘成交量（近10日，来源：{mv.get('source', 'tushare')}）"
+                    f"：{latest.get('trade_date', 'N/A')} 成交额 {fmt(latest.get('total_amount'), '亿元')}，"
+                    f"成交量 {fmt(latest.get('total_volume'), '亿股')}，趋势判定：{mv.get('trend', 'N/A')}"
+                )
+            metrics = sentiment_data.get('index_daily_metrics', {}).get('indices', {}) if sentiment_data.get('index_daily_metrics') else {}
+            if metrics:
+                focus_codes = ['000001.SH', '399001.SZ', '000016.SH', '000905.SH', '399005.SZ', '399006.SZ']
+                summary_parts = []
+                for code in focus_codes:
+                    info = metrics.get(code)
+                    if not info:
+                        continue
+                    summary_parts.append(
+                        f"{info.get('index_name', code)}({info.get('trade_date', 'N/A')}): "
+                        f"PE {fmt(info.get('pe'))}({fmt_change(info.get('pe_change'))}), "
+                        f"PB {fmt(info.get('pb'))}({fmt_change(info.get('pb_change'))}), "
+                        f"换手率 {fmt(info.get('turnover_rate'), '%')}({fmt_change(info.get('turnover_rate_change'), '%')})"
+                    )
+                if summary_parts:
+                    header_lines.append("- 指数估值与换手（index_dailybasic）：" + "；".join(summary_parts))
+
+            header_lines.append("- 其他情绪指标：ARBR、换手率、涨跌停、融资融券、恐慌贪婪指数等均由统一接口预先获取")
+
+            analysis = "\n".join(header_lines) + "\n\n" + analysis
         
         return {
             "agent_name": "市场情绪分析师",
@@ -539,45 +784,72 @@ class StockAnalysisAgents:
             debug_logger.debug("announcement_analyst_agent - announcement_data为None",
                              symbol=stock_info.get('symbol', 'N/A'))
 
-        # 格式化公告数据
         ann_text = ""
         ann_count = 0
         date_range_str = "N/A"
-        
+        pdf_section = ""
+        url_section = ""
+ 
         # 安全的None检查和类型检查
         if announcement_data is not None and isinstance(announcement_data, dict) and announcement_data.get('data_success'):
             try:
                 # 使用新的数据结构
                 announcements = announcement_data.get('announcements', [])
                 ann_count = len(announcements)
-                
+ 
                 # 获取时间范围
                 if announcement_data.get('date_range'):
                     dr = announcement_data['date_range']
                     date_range_str = f"{dr['start']} ~ {dr['end']}"
-                
+ 
                 # 详细格式化前15条公告
                 if announcements:
                     lines = []
+                    url_lines = []
                     for idx, ann in enumerate(announcements[:15], 1):
                         date = ann.get('日期', 'N/A')
                         title = ann.get('公告标题', 'N/A')
                         ann_type = ann.get('公告类型', 'N/A')
                         summary = ann.get('公告摘要', '')
-                        
+                        link = ann.get('download_url') or ann.get('pdf_url')
+                        origin = ann.get('原始数据', {}) if isinstance(ann.get('原始数据'), dict) else {}
+                        raw_url = ann.get('download_url') or ann.get('detail_url') or origin.get('url') or origin.get('file_url') or origin.get('adjunct_url')
+ 
                         line = f"{idx}. [{date}] {title}"
                         if ann_type and ann_type != 'N/A':
                             line += f" (类型: {ann_type})"
                         if summary:
                             line += f"\n   摘要: {summary[:100]}{'...' if len(summary) > 100 else ''}"
-                        
+                        if link and link != 'N/A':
+                            line += f"\n   PDF下载: {link}"
+                        if raw_url and raw_url != 'N/A':
+                            url_lines.append(f"{idx}. {raw_url}")
+ 
                         lines.append(line)
-                    
+ 
                     ann_text = "\n\n".join(lines)
                     print(f"   ✓ 将分析 {ann_count} 条公告 (时间: {date_range_str})")
+                    if url_lines:
+                        url_section = "\n".join(url_lines)
+ 
+                pdf_analysis = announcement_data.get('pdf_analysis', []) or []
+                if pdf_analysis:
+                    pdf_lines = []
+                    for idx, item in enumerate(pdf_analysis, 1):
+                        excerpt = item.get('text') or '未能解析PDF内容'
+                        if excerpt and len(excerpt) > 500:
+                            excerpt = excerpt[:500] + '...'
+                        pdf_lines.append(
+                            f"{idx}. [{item.get('date', 'N/A')}] {item.get('title', 'N/A')}\n"
+                            f"   PDF链接: {item.get('pdf_url', 'N/A')}\n"
+                            f"   PDF内容摘录: {excerpt}"
+                        )
+                    pdf_section = "\n".join(pdf_lines)
+                    print(f"   ✓ 已获取 {len(pdf_analysis)} 份公告PDF文本用于深度分析")
             except Exception as e:
                 print(f"   ⚠️ 格式化公告数据出错: {e}")
                 ann_text = ""
+                pdf_section = ""
 
         # 构建分析提示词
         if ann_text:
@@ -593,8 +865,14 @@ class StockAnalysisAgents:
 公告数量：{ann_count} 条
 数据来源：{announcement_data.get('source', 'N/A') if announcement_data and isinstance(announcement_data, dict) else 'N/A'}
 
+【公告原始链接列表】
+{url_section or '暂无可用URL，请检查统一数据接口输出。'}
+
 【详细公告列表】
 {ann_text}
+
+【PDF公告原文（统一数据接口自动下载）】
+{pdf_section if pdf_section else '暂无有效PDF文本，若需请自行下载公告查看原文。'}
 
 请你作为专业公告分析师，针对以上实际公告进行深度分析：
 
@@ -613,7 +891,7 @@ class StockAnalysisAgents:
 - 投资机会：业绩改善、重大利好、战略转型、地位提升
 
 ## 四、市场反应预判
-- 公告发布后的可能市场反应
+- 公告发布后的可能市场反应（结合PDF原文核心内容）
 - 是否已被充分消化
 - 是否存在预期差
 
@@ -899,7 +1177,7 @@ class StockAnalysisAgents:
         
         # 风险管理分析
         if enabled_analysts.get('risk', True):
-            analysis_tasks.append(('risk_management', self.risk_management_agent, stock_info, indicators, risk_data))
+            analysis_tasks.append(('risk_management', self.risk_management_agent, stock_info, indicators, risk_data, fund_flow_data))
         
         # 市场情绪分析
         if enabled_analysts.get('sentiment', False):

@@ -42,12 +42,13 @@ class QuarterlyReportDataFetcher:
         self.data_source_manager = data_source_manager
         print("✓ 季报数据获取器初始化成功（Tushare优先，akshare备用）")
     
-    def get_quarterly_reports(self, symbol):
+    def get_quarterly_reports(self, symbol, analysis_date=None):
         """
         获取股票的季报数据
         
         Args:
             symbol: 股票代码（6位数字）
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'
             
         Returns:
             dict: 包含季报数据的字典

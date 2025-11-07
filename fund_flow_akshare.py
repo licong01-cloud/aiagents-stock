@@ -41,12 +41,13 @@ class FundFlowAkshareDataFetcher:
         self.available = True
         print("[OK] 资金流向数据获取器初始化成功（akshare数据源）")
     
-    def get_fund_flow_data(self, symbol):
+    def get_fund_flow_data(self, symbol, analysis_date=None):
         """
         获取个股资金流向数据
         
         Args:
             symbol: 股票代码（6位数字）
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'
             
         Returns:
             dict: 包含资金流向数据的字典
@@ -55,7 +56,7 @@ class FundFlowAkshareDataFetcher:
             "symbol": symbol,
             "fund_flow_data": None,
             "data_success": False,
-            "source": "akshare"
+            "source": None  # 将在获取数据后确定
         }
         
         # 只支持中国股票
@@ -70,11 +71,13 @@ class FundFlowAkshareDataFetcher:
             market = self._get_market(symbol)
             
             # 获取资金流向数据
-            fund_flow_data = self._get_individual_fund_flow(symbol, market)
+            fund_flow_data = self._get_individual_fund_flow(symbol, market, analysis_date=analysis_date)
             
             if fund_flow_data:
                 data["fund_flow_data"] = fund_flow_data
-                print(f"   [OK] 成功获取 {len(fund_flow_data.get('data', []))} 个交易日的资金流向数据")
+                # 设置数据源标识
+                data["source"] = fund_flow_data.get("source", "unknown")
+                print(f"   [OK] 成功获取 {len(fund_flow_data.get('data', []))} 个交易日的资金流向数据（数据源: {data['source']}）")
                 data["data_success"] = True
                 print("[完成] 资金流向数据获取完成")
             else:
@@ -107,67 +110,129 @@ class FundFlowAkshareDataFetcher:
             # 默认深圳
             return 'sz'
     
-    def _get_individual_fund_flow(self, symbol, market):
-        """获取个股资金流向数据（支持akshare和tushare自动切换）"""
+    def _get_individual_fund_flow(self, symbol, market, analysis_date=None):
+        """获取个股资金流向数据（优先Tushare，失败则使用Akshare）"""
+        source = None  # 数据源标识
         try:
-            # 优先使用akshare的stock_individual_fund_flow接口
-            print(f"   [Akshare] 正在获取资金流向 (市场: {market})...")
-            
-            with network_optimizer.apply():
-                df = ak.stock_individual_fund_flow(stock=symbol, market=market)
-            
-            if df is None or df.empty:
-                print(f"   [Akshare] 未找到资金流向数据，尝试备用数据源...")
-                
-                # akshare失败，尝试tushare
-                if data_source_manager.tushare_available:
-                    try:
-                        print(f"   [Tushare] 正在获取资金流向数据（备用数据源）...")
-                        ts_code = data_source_manager._convert_to_ts_code(symbol)
-                        
-                        # 计算日期范围（最近N个交易日）
+            # 优先使用Tushare的moneyflow接口
+            if data_source_manager.tushare_available:
+                try:
+                    print(f"   [Tushare] 正在获取资金流向数据（优先数据源）...")
+                    ts_code = data_source_manager._convert_to_ts_code(symbol)
+                    
+                    # 计算日期范围
+                    if analysis_date:
+                        # 历史数据查询：以analysis_date为基准
+                        end_date = analysis_date.replace('-', '') if '-' in analysis_date else analysis_date
+                        # 计算开始日期（往前推N个交易日）
+                        end_dt = datetime.strptime(end_date, '%Y%m%d')
+                        start_dt = end_dt - timedelta(days=self.days * 2)
+                        start_date = start_dt.strftime('%Y%m%d')
+                    else:
+                        # 实时数据查询：使用当前日期
                         end_date = datetime.now().strftime('%Y%m%d')
-                        start_date = (datetime.now() - timedelta(days=self.days * 2)).strftime('%Y%m%d')
-                        
-                        # 获取资金流向数据
+                        start_dt = datetime.now() - timedelta(days=self.days * 2)
+                        start_date = start_dt.strftime('%Y%m%d')
+                    
+                    # 获取资金流向数据
+                    with network_optimizer.apply():
                         df = data_source_manager.tushare_api.moneyflow(
                             ts_code=ts_code,
                             start_date=start_date,
                             end_date=end_date
                         )
+                    
+                    if df is not None and not df.empty:
+                        # 按日期排序（Tushare返回的是倒序，最新在前）
+                        df = df.sort_values('trade_date', ascending=False)
                         
-                        if df is not None and not df.empty:
-                            # 标准化列名以匹配akshare格式
-                            df = df.rename(columns={
-                                'trade_date': '日期',
-                                'buy_sm_amount': '小单买入',
-                                'sell_sm_amount': '小单卖出',
-                                'buy_md_amount': '中单买入',
-                                'sell_md_amount': '中单卖出',
-                                'buy_lg_amount': '大单买入',
-                                'sell_lg_amount': '大单卖出',
-                                'buy_elg_amount': '超大单买入',
-                                'sell_elg_amount': '超大单卖出',
-                                'net_mf_amount': '净额'
-                            })
-                            
-                            # 限制为最近N天
-                            df = df.head(self.days)
-                            print(f"   [Tushare] ✅ 成功获取 {len(df)} 条资金流向数据")
-                        else:
-                            print(f"   [Tushare] ❌ 未找到资金流向数据")
-                            return None
-                    except Exception as te:
-                        print(f"   [Tushare] ❌ 获取失败: {te}")
+                        # 转换日期格式为YYYY-MM-DD（与akshare保持一致）
+                        if 'trade_date' in df.columns:
+                            df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d').dt.strftime('%Y-%m-%d')
+                        
+                        # 标准化列名以匹配akshare格式
+                        df = df.rename(columns={
+                            'trade_date': '日期',
+                            'buy_sm_amount': '小单买入',
+                            'sell_sm_amount': '小单卖出',
+                            'buy_md_amount': '中单买入',
+                            'sell_md_amount': '中单卖出',
+                            'buy_lg_amount': '大单买入',
+                            'sell_lg_amount': '大单卖出',
+                            'buy_elg_amount': '超大单买入',
+                            'sell_elg_amount': '超大单卖出',
+                            'net_mf_amount': '主力净流入-净额'
+                        })
+                        
+                        # 计算各类型净流入
+                        if '小单买入' in df.columns and '小单卖出' in df.columns:
+                            df['小单净流入-净额'] = df['小单买入'] - df['小单卖出']
+                        if '中单买入' in df.columns and '中单卖出' in df.columns:
+                            df['中单净流入-净额'] = df['中单买入'] - df['中单卖出']
+                        if '大单买入' in df.columns and '大单卖出' in df.columns:
+                            df['大单净流入-净额'] = df['大单买入'] - df['大单卖出']
+                        if '超大单买入' in df.columns and '超大单卖出' in df.columns:
+                            df['超大单净流入-净额'] = df['超大单买入'] - df['超大单卖出']
+                        
+                        # 计算主力净流入（大单+超大单）
+                        if '大单净流入-净额' in df.columns and '超大单净流入-净额' in df.columns:
+                            df['主力净流入-净额'] = df['大单净流入-净额'] + df['超大单净流入-净额']
+                        
+                        # 限制为最近N天
+                        df = df.head(self.days)
+                        
+                        # 获取收盘价和涨跌幅（需要从daily接口获取）
+                        try:
+                            # 获取收盘价数据用于补充
+                            daily_df = data_source_manager.tushare_api.daily(
+                                ts_code=ts_code,
+                                start_date=start_date,
+                                end_date=end_date,
+                                fields='trade_date,close,pct_chg'
+                            )
+                            if daily_df is not None and not daily_df.empty:
+                                # 转换日期格式为YYYY-MM-DD
+                                daily_df['trade_date'] = pd.to_datetime(daily_df['trade_date'], format='%Y%m%d').dt.strftime('%Y-%m-%d')
+                                daily_df = daily_df.rename(columns={'trade_date': '日期', 'close': '收盘价', 'pct_chg': '涨跌幅'})
+                                # 合并数据
+                                df = df.merge(daily_df[['日期', '收盘价', '涨跌幅']], on='日期', how='left')
+                        except Exception as e:
+                            print(f"   [Tushare] ⚠️ 获取收盘价数据失败: {e}")
+                        
+                        print(f"   [Tushare] ✅ 成功获取 {len(df)} 条资金流向数据")
+                        source = "tushare"
+                    else:
+                        print(f"   [Tushare] ❌ 未找到资金流向数据，尝试备用数据源...")
+                        df = None
+                except Exception as te:
+                    print(f"   [Tushare] ❌ 获取失败: {te}，尝试备用数据源...")
+                    df = None
+            else:
+                df = None
+            
+            # Tushare失败或不可用，尝试Akshare备用
+            if df is None or df.empty:
+                print(f"   [Akshare] 正在获取资金流向数据（备用数据源，市场: {market})...")
+                try:
+                    with network_optimizer.apply():
+                        df = ak.stock_individual_fund_flow(stock=symbol, market=market)
+                    
+                    if df is None or df.empty:
+                        print(f"   [Akshare] ❌ 未找到资金流向数据")
                         return None
-                else:
+                    
+                    # akshare 返回的数据是按时间正序排列（从旧到新），所以使用 tail() 获取最近N天的数据
+                    df = df.tail(self.days)
+                    
+                    # 按日期倒序排列，让最新的数据在前面
+                    df = df.iloc[::-1].reset_index(drop=True)
+                    source = "akshare"
+                except Exception as ae:
+                    print(f"   [Akshare] ❌ 获取失败: {ae}")
                     return None
-            
-            # akshare 返回的数据是按时间正序排列（从旧到新），所以使用 tail() 获取最近N天的数据
-            df = df.tail(self.days)
-            
-            # 按日期倒序排列，让最新的数据在前面
-            df = df.iloc[::-1].reset_index(drop=True)
+            else:
+                # Tushare数据已经是倒序，不需要再反转
+                df = df.reset_index(drop=True)
             
             # 转换为字典列表
             data_list = []
@@ -188,11 +253,16 @@ class FundFlowAkshareDataFetcher:
                 if item:
                     data_list.append(item)
             
+            # 如果没有确定数据源，默认为akshare（兜底情况）
+            if source is None:
+                source = "akshare"
+            
             return {
                 "data": data_list,
                 "days": len(data_list),
                 "columns": df.columns.tolist(),
                 "market": market,
+                "source": source,
                 "query_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             
@@ -214,7 +284,7 @@ class FundFlowAkshareDataFetcher:
         fund_flow_data = data.get("fund_flow_data")
         if fund_flow_data:
             text_parts.append(f"""
-【个股资金流向数据 - akshare数据源】
+【个股资金流向数据 - {data.get('source', 'unknown')}】
 股票代码：{data.get('symbol', 'N/A')}
 市场：{fund_flow_data.get('market', 'N/A').upper()}
 交易日数：最近{fund_flow_data.get('days', 0)}个交易日

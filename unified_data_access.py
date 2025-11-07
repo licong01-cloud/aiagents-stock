@@ -1,7 +1,13 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 import time as time_module
 import pandas as pd
 from datetime import datetime, timedelta, time
+import requests
+from io import BytesIO
+import re
+import zipfile
+from urllib.parse import urlparse, parse_qs
+from pathlib import Path
 
 from data_source_manager import data_source_manager
 from network_optimizer import network_optimizer
@@ -30,9 +36,14 @@ class UnifiedDataAccess:
     def get_stock_basic_info(self, symbol: str) -> Dict[str, Any]:
         return data_source_manager.get_stock_basic_info(symbol)
     
-    def get_stock_info(self, symbol: str) -> Dict[str, Any]:
-        """获取股票完整信息（包含基本信息、实时行情、估值指标等）"""
-        debug_logger.info("get_stock_info开始", symbol=symbol, method="get_stock_info")
+    def get_stock_info(self, symbol: str, analysis_date: Optional[str] = None) -> Dict[str, Any]:
+        """获取股票完整信息（包含基本信息、实时行情、估值指标等）
+        
+        Args:
+            symbol: 股票代码
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'，如果提供则获取历史数据
+        """
+        debug_logger.info("get_stock_info开始", symbol=symbol, analysis_date=analysis_date, method="get_stock_info")
         
         # 获取基本信息
         info = self.get_stock_basic_info(symbol)
@@ -59,12 +70,12 @@ class UnifiedDataAccess:
         # 优先使用Tushare获取实时行情和估值数据
         if data_source_manager.tushare_available:
             try:
-                debug_logger.debug("尝试从Tushare获取实时行情和估值", symbol=symbol)
+                debug_logger.debug("尝试从Tushare获取实时行情和估值", symbol=symbol, analysis_date=analysis_date)
                 ts_code = data_source_manager._convert_to_ts_code(symbol)
                 
                 # 根据日期和时间判断，获取合适的交易日
-                trade_date = self._get_appropriate_trade_date()
-                debug_logger.debug("选择的交易日", trade_date=trade_date, symbol=symbol)
+                trade_date = self._get_appropriate_trade_date(analysis_date=analysis_date)
+                debug_logger.debug("选择的交易日", trade_date=trade_date, symbol=symbol, analysis_date=analysis_date)
                 
                 try:
                     # 获取daily_basic（包含市盈率、市净率、市值等）
@@ -172,8 +183,8 @@ class UnifiedDataAccess:
             except Exception as e:
                 debug_logger.warning("Tushare获取实时数据失败", error=e, symbol=symbol)
         
-        # Tushare失败或数据不完整，使用Akshare备用
-        if info['current_price'] == 'N/A' or info['pe_ratio'] == 'N/A':
+        # Tushare失败或数据不完整，使用Akshare备用（仅实时模式，历史模式不使用Akshare）
+        if (info['current_price'] == 'N/A' or info['pe_ratio'] == 'N/A') and not analysis_date:
             try:
                 debug_logger.debug("尝试从Akshare获取详细信息", symbol=symbol)
                 with network_optimizer.apply():
@@ -214,8 +225,8 @@ class UnifiedDataAccess:
             except Exception as e:
                 debug_logger.warning("Akshare获取详细信息失败", error=e, symbol=symbol)
         
-        # 如果还是没有当前价格，尝试从实时行情获取
-        if info['current_price'] == 'N/A':
+        # 如果还是没有当前价格，尝试从实时行情获取（仅实时模式）
+        if info['current_price'] == 'N/A' and not analysis_date:
             try:
                 debug_logger.debug("尝试从实时行情获取价格", symbol=symbol)
                 quotes = self.get_realtime_quotes(symbol)
@@ -231,11 +242,21 @@ class UnifiedDataAccess:
         # 如果还是没有，尝试从历史数据获取最新收盘价
         if info['current_price'] == 'N/A':
             try:
-                debug_logger.debug("尝试从历史数据获取最新价格", symbol=symbol)
+                debug_logger.debug("尝试从历史数据获取最新价格", symbol=symbol, analysis_date=analysis_date)
+                # 如果提供了analysis_date，使用它作为结束日期；否则使用当前日期
+                if analysis_date:
+                    end_date = analysis_date
+                    base_date = datetime.strptime(analysis_date, '%Y%m%d')
+                else:
+                    end_date = datetime.now().strftime('%Y%m%d')
+                    base_date = datetime.now()
+                
+                start_date = (base_date - timedelta(days=30)).strftime('%Y%m%d')
+                
                 hist_data = self.get_stock_hist_data(
                     symbol=symbol,
-                    start_date=(datetime.now() - timedelta(days=30)).strftime('%Y%m%d'),
-                    end_date=datetime.now().strftime('%Y%m%d')
+                    start_date=start_date,
+                    end_date=end_date
                 )
                 
                 if hist_data is not None and not hist_data.empty and isinstance(hist_data, pd.DataFrame):
@@ -286,16 +307,29 @@ class UnifiedDataAccess:
         
         return info
     
-    def get_stock_data(self, symbol: str, period: str = '1y'):
-        """获取股票历史数据（别名方法，兼容app.py旧接口）"""
+    def get_stock_data(self, symbol: str, period: str = '1y', analysis_date: Optional[str] = None):
+        """获取股票历史数据（别名方法，兼容app.py旧接口）
+        
+        Args:
+            symbol: 股票代码
+            period: 数据周期（'1mo', '3mo', '6mo', '1y', '2y', '5y', 'max'）
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'，如果提供则基于该日期计算日期范围
+        """
         
         debug_logger.info("UnifiedDataAccess.get_stock_data调用",
                          symbol=symbol,
                          period=period,
+                         analysis_date=analysis_date,
                          method="get_stock_data")
         
         # 根据period计算日期范围
-        end_date = datetime.now().strftime('%Y%m%d')
+        # 如果提供了analysis_date，使用它作为截止日期；否则使用当前日期
+        if analysis_date:
+            end_date = analysis_date  # 已经是'YYYYMMDD'格式
+            base_date = datetime.strptime(analysis_date, '%Y%m%d')
+        else:
+            end_date = datetime.now().strftime('%Y%m%d')
+            base_date = datetime.now()
         
         period_map = {
             '1mo': 30,
@@ -307,7 +341,7 @@ class UnifiedDataAccess:
             'max': 3650
         }
         days = period_map.get(period, 365)
-        start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+        start_date = (base_date - timedelta(days=days)).strftime('%Y%m%d')
         
         debug_logger.debug("计算日期范围",
                           start_date=start_date,
@@ -415,12 +449,13 @@ class UnifiedDataAccess:
     def get_realtime_quotes(self, symbol: str) -> Dict[str, Any]:
         return data_source_manager.get_realtime_quotes(symbol)
 
-    def get_financial_data(self, symbol: str, report_type: str = 'income') -> Dict[str, Any]:
+    def get_financial_data(self, symbol: str, report_type: str = 'income', analysis_date: Optional[str] = None) -> Dict[str, Any]:
         """获取财务数据（包装为字典格式）
         
         Args:
             symbol: 股票代码
             report_type: 报表类型（'income'利润表, 'balance'资产负债表, 'cashflow'现金流量表）
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'，目前财务数据获取不受此参数影响
             
         Returns:
             字典格式的财务数据，包含：
@@ -430,7 +465,7 @@ class UnifiedDataAccess:
             - cash_flow: 现金流量表
             - error: 错误信息（如果有）
         """
-        debug_logger.info(f"开始获取财务数据", symbol=symbol, report_type=report_type, method="get_financial_data")
+        debug_logger.info(f"开始获取财务数据", symbol=symbol, report_type=report_type, analysis_date=analysis_date, method="get_financial_data")
         
         result = {
             "symbol": symbol,
@@ -443,6 +478,8 @@ class UnifiedDataAccess:
         
         try:
             # 如果只请求一种报表类型，直接获取
+            # 注意：data_source_manager.get_financial_data() 目前不支持 analysis_date 参数
+            # 财务数据通常是历史累计数据，不依赖于特定时间点
             df = data_source_manager.get_financial_data(symbol, report_type)
             
             if df is not None and isinstance(df, pd.DataFrame) and not df.empty:
@@ -490,64 +527,88 @@ class UnifiedDataAccess:
         return result
 
     # 兜底封装：现有专用模块（A股为主）
-    def get_quarterly_reports(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_quarterly_reports(self, symbol: str, analysis_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         try:
             from quarterly_report_data import QuarterlyReportDataFetcher
             with network_optimizer.apply():
-                return QuarterlyReportDataFetcher().get_quarterly_reports(symbol)
+                return QuarterlyReportDataFetcher().get_quarterly_reports(symbol, analysis_date=analysis_date)
         except Exception as e:
             return {"symbol": symbol, "data_success": False, "error": str(e)}
 
-    def get_fund_flow_data(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_fund_flow_data(self, symbol: str, analysis_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         try:
             from fund_flow_akshare import FundFlowAkshareDataFetcher
             with network_optimizer.apply():
-                return FundFlowAkshareDataFetcher().get_fund_flow_data(symbol)
+                return FundFlowAkshareDataFetcher().get_fund_flow_data(symbol, analysis_date=analysis_date)
         except Exception as e:
+            debug_logger.error("获取资金流向数据失败", symbol=symbol, error=str(e), analysis_date=analysis_date)
             return {"symbol": symbol, "data_success": False, "error": str(e)}
 
-    def get_market_sentiment_data(self, symbol: str, stock_data) -> Optional[Dict[str, Any]]:
+    def get_market_sentiment_data(self, symbol: str, stock_data, analysis_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         try:
             from market_sentiment_data import MarketSentimentDataFetcher
             with network_optimizer.apply():
-                return MarketSentimentDataFetcher().get_market_sentiment_data(symbol, stock_data)
+                return MarketSentimentDataFetcher().get_market_sentiment_data(symbol, stock_data, analysis_date=analysis_date)
         except Exception as e:
+            debug_logger.error("获取市场情绪数据失败", symbol=symbol, error=str(e), analysis_date=analysis_date)
             return {"symbol": symbol, "data_success": False, "error": str(e)}
 
-    def get_news_data(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_margin_trading_history(self, symbol: str, days: int = 5, analysis_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """获取个股融资融券历史数据"""
+        try:
+            from market_sentiment_data import MarketSentimentDataFetcher
+            with network_optimizer.apply():
+                return MarketSentimentDataFetcher()._get_margin_trading_history(symbol, days=days, analysis_date=analysis_date)
+        except Exception as e:
+            debug_logger.error("获取融资融券历史数据失败", symbol=symbol, error=str(e), analysis_date=analysis_date)
+            return {"symbol": symbol, "data_success": False, "error": str(e)}
+
+    def get_index_daily_metrics(self, analysis_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """获取重点指数每日指标数据（上证综指、深证成指、上证50、中证500、中小板指、创业板指）"""
+        try:
+            from market_sentiment_data import MarketSentimentDataFetcher
+            with network_optimizer.apply():
+                return MarketSentimentDataFetcher()._get_index_daily_metrics(analysis_date=analysis_date)
+        except Exception as e:
+            debug_logger.error("获取指数每日指标失败", error=str(e), analysis_date=analysis_date)
+            return {"data_success": False, "error": str(e)}
+
+    def get_news_data(self, symbol: str, analysis_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         try:
             from qstock_news_data import QStockNewsDataFetcher
             with network_optimizer.apply():
-                return QStockNewsDataFetcher().get_stock_news(symbol)
+                return QStockNewsDataFetcher().get_stock_news(symbol, analysis_date=analysis_date)
         except Exception as e:
+            debug_logger.error("获取新闻数据失败", symbol=symbol, error=str(e), analysis_date=analysis_date)
             return {"symbol": symbol, "data_success": False, "error": str(e)}
     
-    def get_stock_news(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_stock_news(self, symbol: str, analysis_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """获取股票新闻（别名方法，兼容app.py旧接口）"""
-        return self.get_news_data(symbol)
+        return self.get_news_data(symbol, analysis_date=analysis_date)
     
-    def get_risk_data(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_risk_data(self, symbol: str, analysis_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """获取风险数据（限售解禁、大股东减持等）"""
         try:
             from risk_data_fetcher import RiskDataFetcher
             with network_optimizer.apply():
-                return RiskDataFetcher().get_risk_data(symbol)
+                return RiskDataFetcher().get_risk_data(symbol, analysis_date=analysis_date)
         except Exception as e:
             return {"symbol": symbol, "data_success": False, "error": str(e)}
 
     # 预留接口（先返回占位，后续补齐具体数据源实现）
-    def get_research_reports_data(self, symbol: str, days: int = 180) -> Dict[str, Any]:
+    def get_research_reports_data(self, symbol: str, days: int = 180, analysis_date: Optional[str] = None) -> Dict[str, Any]:
         """获取机构研报数据 (Tushare优先，包含研报内容，基于内容分析)
         
         Args:
             symbol: 股票代码
             days: 查询天数，默认180天（6个月）
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'，如果提供则基于该日期计算查询范围
             
         Returns:
             研报数据字典，包含研报内容和统计分析
         """
         start_time = time_module.time()
-        debug_logger.info("开始获取研报数据", symbol=symbol, days=days)
+        debug_logger.info("开始获取研报数据", symbol=symbol, days=days, analysis_date=analysis_date)
         print(f"📑 [UnifiedDataAccess] 正在获取 {symbol} 机构研报数据（最近{days}天，包含内容）...")
         
         data = {
@@ -573,9 +634,14 @@ class UnifiedDataAccess:
                 print(f"   [方法1-Tushare] 正在获取研报数据（report_rc接口，包含内容）...")
                 ts_code = self._convert_to_ts_code(symbol)
                 
-                # 计算日期范围（6个月，约180天）
-                end_date = datetime.now().strftime('%Y%m%d')
-                start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+                # 计算日期范围（基于analysis_date或当前日期）
+                if analysis_date:
+                    end_date = analysis_date
+                    base_date = datetime.strptime(analysis_date, '%Y%m%d')
+                else:
+                    end_date = datetime.now().strftime('%Y%m%d')
+                    base_date = datetime.now()
+                start_date = (base_date - timedelta(days=days)).strftime('%Y%m%d')
                 
                 with network_optimizer.apply():
                     df_reports = data_source_manager.tushare_api.report_rc(
@@ -742,314 +808,392 @@ class UnifiedDataAccess:
         
         return data
 
-    def get_announcement_data(self, symbol: str, days: int = 30) -> Dict[str, Any]:
+    def get_announcement_data(self, symbol: str, days: int = 30, analysis_date: Optional[str] = None) -> Dict[str, Any]:
         """获取公告数据 - 过去N天的上市公司公告 (Tushare优先)
         
         Args:
             symbol: 股票代码
             days: 获取最近N天的公告，默认30天
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'，如果提供则基于该日期计算查询范围
             
         Returns:
             包含公告列表的字典
         """
         start_time = time_module.time()
-        debug_logger.info(f"开始获取公告数据", symbol=symbol, days=days, method="get_announcement_data")
+        debug_logger.info(
+            "开始获取公告数据",
+            symbol=symbol,
+            days=days,
+            analysis_date=analysis_date,
+            method="get_announcement_data",
+        )
         print(f"📢 [UnifiedDataAccess] 正在获取 {symbol} 最近{days}天的公告数据...")
         
         data = {
             "symbol": symbol,
             "announcements": [],
+            "pdf_analysis": [],
             "data_success": False,
             "source": None,
-            "days": days
+            "days": days,
+            "date_range": None,
         }
         
         # 只支持A股
         if not self._is_chinese_stock(symbol):
             data["error"] = "公告数据仅支持中国A股股票"
-            debug_logger.warning(f"公告数据仅支持A股", symbol=symbol, is_chinese=False)
-            print(f"   ⚠️ 公告数据仅支持A股")
+            debug_logger.warning("公告数据仅支持A股", symbol=symbol, is_chinese=False)
+            print("   ⚠️ 公告数据仅支持A股")
             return data
         
-        try:
-            debug_logger.debug(f"进入公告数据获取try块", symbol=symbol)
-            from datetime import datetime, timedelta
-            import pandas as pd
-            
-            # 计算时间范围
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days)
-            start_date_str = start_date.strftime('%Y%m%d')
-            end_date_str = end_date.strftime('%Y%m%d')
-            
-            announcements = []
-            
-            # 方法1: 优先使用Tushare获取公告
-            if data_source_manager.tushare_available:
+        def _normalize_url(url: Optional[str]) -> Optional[str]:
+            if not url:
+                return None
+            url = url.strip()
+            if not url:
+                return None
+            if url.startswith('//'):
+                return 'https:' + url
+            if url.startswith('/'):
+                return 'https://static.cninfo.com.cn' + url
+            return url
+
+        def _resolve_pdf_url(row: Dict[str, Any], ts_code_value: str, ann_date_value: str) -> Optional[str]:
+            key_priority = [
+                'pdf_url',
+                'file_url',
+                'adjunct_url',
+                'page_pdf_url',
+                'ann_pdf_url',
+                'url',
+                'page_url',
+                'doc_url',
+                'src',
+            ]
+            for key in key_priority:
+                value = row.get(key)
+                normalized = _normalize_url(value) if isinstance(value, str) else None
+                if normalized:
+                    return normalized
+
+            # 特殊处理：Tushare anns_d 可能提供 announcement_id / announcement_type 与 url
+            ann_id = row.get('announcement_id') or row.get('attachment_id')
+            org_id = row.get('org_id') or row.get('orgId')
+            announcement_type = row.get('announcement_type') or row.get('plate')
+            if ann_id and org_id:
+                if not announcement_type:
+                    if ts_code_value.endswith('.SH'):
+                        announcement_type = 'sse'
+                    elif ts_code_value.endswith('.SZ'):
+                        announcement_type = 'szse'
+                    elif ts_code_value.endswith('.BJ'):
+                        announcement_type = 'bj'
+                return (
+                    "https://www.cninfo.com.cn/new/disclosure/detail"
+                    f"?plate={announcement_type or ''}&orgId={org_id}"
+                    f"&stockCode={ts_code_value.replace('.', '')}"
+                    f"&announcementId={ann_id}"
+                    + (f"&announcementTime={ann_date_value}" if ann_date_value else "")
+                )
+
+        def _extract_pdf_text(pdf_bytes: bytes) -> Optional[str]:
+            text_candidates: List[str] = []
+            # 优先尝试 PyPDF2
+            try:
+                import PyPDF2  # type: ignore
+
+                reader = PyPDF2.PdfReader(BytesIO(pdf_bytes))
+                page_texts = []
+                for page in reader.pages[:20]:  # 最多处理前20页
+                    extracted = page.extract_text() or ""
+                    page_texts.append(extracted.strip())
+                combined = "\n".join(filter(None, page_texts)).strip()
+                if combined:
+                    text_candidates.append(combined)
+            except Exception as e:
+                debug_logger.debug("PyPDF2解析公告PDF失败", error=str(e))
+
+            # 备用 pdfplumber
+            if not text_candidates:
                 try:
-                    print(f"   [方法1-Tushare] 正在获取公告数据...")
-                    ts_code = data_source_manager._convert_to_ts_code(symbol)
-                    
-                    # 使用Tushare的announcement接口
-                    df = data_source_manager.tushare_api.announcement(
+                    import pdfplumber  # type: ignore
+
+                    with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+                        page_texts = []
+                        for page in pdf.pages[:20]:
+                            page_texts.append(page.extract_text() or "")
+                        combined = "\n".join(filter(None, page_texts)).strip()
+                        if combined:
+                            text_candidates.append(combined)
+                except Exception as e:
+                    debug_logger.debug("pdfplumber解析公告PDF失败", error=str(e))
+
+            if text_candidates:
+                text = text_candidates[0]
+                # 控制文本长度，避免过长
+                if len(text) > 8000:
+                    return text[:8000] + "..."
+                return text
+            return None
+
+        session = requests.Session()
+        session.headers.update({"User-Agent": "Mozilla/5.0"})
+
+        def _cninfo_download_url(detail_url: str) -> Optional[str]:
+            try:
+                parsed = urlparse(detail_url)
+                qs = parse_qs(parsed.query)
+                ann_id = qs.get('announcementId') or qs.get('bulletinId')
+                ann_time = qs.get('announcementTime') or qs.get('announceTime')
+                if ann_id and ann_time:
+                    return (
+                        "https://www.cninfo.com.cn/new/announcement/download"
+                        f"?bulletinId={ann_id[0]}&announceTime={ann_time[0]}"
+                    )
+            except Exception:
+                pass
+            return None
+
+        def _download_pdf_bytes(url: str, origin_detail: Optional[str] = None, depth: int = 0) -> Optional[bytes]:
+            if not url or not isinstance(url, str) or depth > 2:
+                return None
+            try:
+                headers = {"User-Agent": "Mozilla/5.0"}
+                if origin_detail and depth == 0:
+                    headers["Referer"] = origin_detail
+                    with network_optimizer.apply():
+                        session.get(origin_detail, headers=headers, timeout=25, allow_redirects=True)
+                cninfo_download = _cninfo_download_url(url)
+                request_url = cninfo_download or url
+                if origin_detail:
+                    headers["Referer"] = origin_detail
+                with network_optimizer.apply():
+                    response = session.get(request_url, headers=headers, timeout=25, allow_redirects=True)
+                if response.status_code != 200:
+                    debug_logger.debug("公告PDF下载失败", url=url, status=response.status_code)
+                    return None
+
+                content = response.content
+                content_type = response.headers.get("Content-Type", "").lower()
+                if content.startswith(b"%PDF") or "application/pdf" in content_type:
+                    return content
+                if content.startswith(b"PK"):
+                    try:
+                        with zipfile.ZipFile(BytesIO(content)) as zf:
+                            for name in zf.namelist():
+                                if name.lower().endswith('.pdf'):
+                                    return zf.read(name)
+                    except Exception as zip_error:
+                        debug_logger.debug("公告PDF解压失败", url=url, error=str(zip_error))
+
+                # 可能返回的是 HTML 页面，尝试在其中寻找实际PDF链接
+                text_snippet = content[:1024].decode("utf-8", errors="ignore")
+                if "<html" in text_snippet.lower():
+                    html_text = response.text
+                    pdf_match = re.search(r"https?://static\\.cninfo\\.com\\.cn/[^\\\"'<>]+\\.pdf", html_text, re.I)
+                    if pdf_match:
+                        next_url = pdf_match.group(0)
+                        debug_logger.debug("公告PDF链接重定向", original=url, extracted=next_url)
+                        return _download_pdf_bytes(next_url, origin_detail or url, depth + 1)
+                    # 尝试从脚本或 AJAX 接口获取PDF
+                    ann_id_match = re.search(r"announcementId=([A-Za-z0-9]+)", url)
+                    org_id_match = re.search(r"orgId=([A-Za-z0-9]+)", url)
+                    if ann_id_match and org_id_match:
+                        ann_id = ann_id_match.group(1)
+                        org_id = org_id_match.group(1)
+                        api_url = (
+                            "https://www.cninfo.com.cn/new/disclosure/detail"
+                            f"?plate=&orgId={org_id}&stockCode=&announcementId={ann_id}&lang=zh"
+                        )
+                        with network_optimizer.apply():
+                            api_resp = requests.get(api_url, headers=headers, timeout=25, allow_redirects=True)
+                        if api_resp.status_code == 200:
+                            api_text = api_resp.text
+                            pdf_match_api = re.search(r"https?://static\\.cninfo\\.com\\.cn/[^\\\"'<>]+\\.pdf", api_text, re.I)
+                            if pdf_match_api:
+                                next_url = pdf_match_api.group(0)
+                                debug_logger.debug("公告PDF链接(AJAX)重定向", original=url, extracted=next_url)
+                                return _download_pdf_bytes(next_url, origin_detail or url, depth + 1)
+                    pdf_match_rel = re.search(r"data-pdf=\"([^\"]+\.pdf)\"", html_text)
+                    if pdf_match_rel:
+                        next_url = _normalize_url(pdf_match_rel.group(1))
+                        if next_url:
+                            debug_logger.debug("公告PDF链接重定向(data-pdf)", original=url, extracted=next_url)
+                            return _download_pdf_bytes(next_url, origin_detail or url, depth + 1)
+                    href_match = re.search(r'href="([^"]+\.pdf)"', html_text)
+                    if href_match:
+                        next_url = _normalize_url(href_match.group(1))
+                        if next_url:
+                            debug_logger.debug("公告PDF链接重定向(href)", original=url, extracted=next_url)
+                            return _download_pdf_bytes(next_url, origin_detail or url, depth + 1)
+                return None
+            except Exception as e:
+                debug_logger.debug("公告PDF下载异常", url=url, error=str(e))
+                return None
+
+        def _download_and_parse_pdf(url: str, ann_meta: Optional[Dict[str, Any]] = None) -> Tuple[Optional[str], Optional[str]]:
+            detail_url = None
+            if ann_meta:
+                detail_url = ann_meta.get('detail_url') if ann_meta.get('detail_url') != 'N/A' else None
+            pdf_bytes = _download_pdf_bytes(url, detail_url)
+            if not pdf_bytes:
+                return None, None
+            text = _extract_pdf_text(pdf_bytes)
+
+            saved_path = None
+            if pdf_bytes:
+                title = (ann_meta or {}).get('公告标题') or 'announcement'
+                trade_date = (ann_meta or {}).get('日期') or datetime.now().strftime('%Y-%m-%d')
+                safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
+                symbol_dir = Path("data") / "announcements" / symbol
+                symbol_dir.mkdir(parents=True, exist_ok=True)
+                filename = f"{trade_date}_{safe_title}.pdf"
+                saved_path = str(symbol_dir / filename)
+                with open(saved_path, "wb") as f:
+                    f.write(pdf_bytes)
+
+            return text, saved_path
+
+        try:
+            if not data_source_manager.tushare_available:
+                data["error"] = "Tushare不可用，无法获取公告数据"
+                print("   ⚠️ 当前环境未启用Tushare，无法获取公告")
+                return data
+
+            ts_code = data_source_manager._convert_to_ts_code(symbol)
+            if analysis_date:
+                end_dt = datetime.strptime(analysis_date, "%Y%m%d")
+            else:
+                end_dt = datetime.now()
+
+            start_dt = end_dt - timedelta(days=days)
+            start_date_str = start_dt.strftime("%Y%m%d")
+            end_date_str = end_dt.strftime("%Y%m%d")
+            data["date_range"] = {"start": start_date_str, "end": end_date_str}
+
+            print("   [Tushare] 正在查询公告数据 (anns_d 接口)...")
+            all_rows: List[pd.DataFrame] = []
+            limit = 50
+            offset = 0
+            while True:
+                with network_optimizer.apply():
+                    df_batch = data_source_manager.tushare_api.anns_d(
                         ts_code=ts_code,
                         start_date=start_date_str,
-                        end_date=end_date_str
+                        end_date=end_date_str,
+                        limit=limit,
+                        offset=offset,
+                        fields="ts_code,ann_date,ann_type,title,content,file_url,adjunct_url,page_pdf_url,pdf_url,org_id,announcement_id,announcement_type,src,url"
                     )
-                    
-                    if df is not None and isinstance(df, pd.DataFrame) and not df.empty:
-                        print(f"   ✓ 获取到 {len(df)} 条Tushare公告数据")
-                        
-                        for idx, row in df.iterrows():
-                            try:
-                                ann_date = row.get('ann_date', '')
-                                ts_code = row.get('ts_code', '')
-                                
-                                # 构建公告链接（根据交易所）
-                                link = 'N/A'
-                                if pd.notna(ann_date) and pd.notna(ts_code):
-                                    if ts_code.endswith('.SH'):
-                                        # 上交所
-                                        link = f"http://www.sse.com.cn/disclosure/bond/announcement/{ann_date}/{ts_code.replace('.SH', '')}.pdf"
-                                    elif ts_code.endswith('.SZ'):
-                                        # 深交所
-                                        link = f"http://www.cninfo.com.cn/new/disclosure/detail?plate=&orgId=&stockCode={ts_code.replace('.SZ', '')}&announcementId=&announcementTime={ann_date}"
-                                    elif ts_code.endswith('.BJ'):
-                                        # 北交所
-                                        link = f"http://www.bse.cn/disclosure/{ann_date}/{ts_code.replace('.BJ', '')}.pdf"
-                                
-                                announcement = {
-                                    '日期': ann_date if pd.notna(ann_date) else 'N/A',
-                                    '公告标题': str(row.get('title', 'N/A')),
-                                    '公告类型': str(row.get('type', 'N/A')),
-                                    '公告摘要': str(row.get('content', ''))[:200] if pd.notna(row.get('content')) else '',
-                                    '公告链接': link
-                                }
-                                announcements.append(announcement)
-                            except Exception as e:
-                                debug_logger.debug(f"解析Tushare公告行失败", error=e, row_idx=idx)
-                                continue
-                        
-                        if announcements:
-                            data["source"] = "tushare"
-                            print(f"   [方法1] ✅ 成功获取 {len(announcements)} 条公告")
-                except Exception as e:
-                    debug_logger.warning(f"Tushare获取公告失败", error=e, symbol=symbol)
-                    print(f"   [方法1] ❌ 失败: {e}")
-            
-            # 方法2: 如果Tushare失败，尝试使用问财获取公告
-            if not announcements:
-                try:
-                    print(f"   [方法2-问财] 正在获取公告数据...")
-                    with network_optimizer.apply():
-                        import pywencai
-                        
-                        # 构造查询语句：获取公告
-                        query = f"{symbol}公告"
-                        res = pywencai.get(query=query, loop=True)
-                    
-                    if res is not None:
-                        # 处理嵌套结构（tableV1）
-                        df_result = None
-                        if isinstance(res, pd.DataFrame):
-                            df_result = res
-                        elif isinstance(res, dict):
-                            try:
-                                df_result = pd.DataFrame([res])
-                            except:
-                                df_result = None
-                        
-                        # 检查是否是嵌套结构
-                        if df_result is not None and 'tableV1' in df_result.columns and len(df_result.columns) == 1:
-                            table_v1_data = df_result.iloc[0]['tableV1']
-                            if isinstance(table_v1_data, pd.DataFrame):
-                                df_result = table_v1_data
-                            elif isinstance(table_v1_data, list) and len(table_v1_data) > 0:
-                                df_result = pd.DataFrame(table_v1_data)
-                        
-                        if df_result is not None and not df_result.empty:
-                            print(f"   ✓ 获取到 {len(df_result)} 条原始公告数据")
-                            
-                            for idx, row in df_result.iterrows():
-                                try:
-                                    # 查找日期列和标题列
-                                    date_col = None
-                                    title_col = None
-                                    type_col = None
-                                    
-                                    for col in df_result.columns:
-                                        col_str = str(col).lower()
-                                        if '日期' in col_str or 'date' in col_str or '时间' in col_str:
-                                            date_col = col
-                                        elif '标题' in col_str or '公告' in col_str or 'title' in col_str or '名称' in col_str:
-                                            title_col = col
-                                        elif '类型' in col_str or 'type' in col_str or '类别' in col_str:
-                                            type_col = col
-                                    
-                                    # 提取公告信息
-                                    item = {}
-                                    for col in df_result.columns:
-                                        value = row.get(col)
-                                        if value is not None and not (isinstance(value, float) and pd.isna(value)):
-                                            if not isinstance(value, pd.DataFrame):
-                                                try:
-                                                    item[col] = str(value)
-                                                except:
-                                                    pass
-                                    
-                                    if item:
-                                        # 尝试解析日期
-                                        date_str = None
-                                        if date_col and date_col in item:
-                                            date_str = item[date_col]
-                                        else:
-                                            # 从所有字段中查找日期
-                                            for key, val in item.items():
-                                                if '日期' in str(key) or '时间' in str(key):
-                                                    date_str = val
-                                                    break
-                                        
-                                        # 验证日期是否在范围内
-                                        in_range = True
-                                        if date_str:
-                                            try:
-                                                pub_date = pd.to_datetime(str(date_str))
-                                                if pub_date < start_date or pub_date > end_date:
-                                                    in_range = False
-                                                date_str = pub_date.strftime('%Y-%m-%d')
-                                            except:
-                                                in_range = False  # 日期解析失败，可能不是最近的数据
-                                        
-                                        if in_range:
-                                            # 提取标题
-                                            title = None
-                                            if title_col and title_col in item:
-                                                title = item[title_col]
-                                            else:
-                                                # 从所有字段中查找标题
-                                                for key, val in item.items():
-                                                    if '标题' in str(key) or '公告' in str(key) or '名称' in str(key):
-                                                        title = val
-                                                        break
-                                            
-                                            if not title:
-                                                # 如果没有标题，尝试使用第一个非日期字段
-                                                for key, val in item.items():
-                                                    key_str = str(key).lower()
-                                                    if '日期' not in key_str and '时间' not in key_str:
-                                                        val_str = str(val)
-                                                        # 跳过HTML标签和过短的无意义内容
-                                                        if not val_str.startswith('<') and len(val_str) > 10:
-                                                            title = val_str[:200]  # 限制长度
-                                                            break
-                                            
-                                            if title:
-                                                # 清理HTML标签
-                                                import re
-                                                # 移除HTML标签
-                                                title_clean = re.sub(r'<[^>]+>', '', str(title))
-                                                # 移除多余的空白
-                                                title_clean = re.sub(r'\s+', ' ', title_clean).strip()
-                                                
-                                                # 如果清理后太短，跳过
-                                                if len(title_clean) < 5:
-                                                    continue
-                                                
-                                                announcement = {
-                                                    '日期': date_str or 'N/A',
-                                                    '公告标题': title_clean[:200],
-                                                    '公告类型': item.get(type_col, 'N/A') if type_col and type_col in item else 'N/A',
-                                                    '公告摘要': ''
-                                                }
-                                                announcements.append(announcement)
-                                except Exception as e:
-                                    debug_logger.debug(f"解析公告行失败", error=e, row_idx=idx)
-                                    continue
-                            
-                            if announcements:
-                                data["source"] = "pywencai"
-                                print(f"   [方法2] ✅ 成功获取 {len(announcements)} 条公告")
-                        else:
-                            print(f"   [方法2] ⚠️ 未获取到公告数据")
-                
-                except Exception as e:
-                    debug_logger.warning(f"问财获取公告失败", error=e, symbol=symbol)
-                    print(f"   [方法2] ❌ 失败: {e}")
-            
-            # 方法3: 如果Tushare和问财都失败，尝试使用Akshare的新闻接口筛选
-            if not announcements:
-                try:
-                    print(f"   [方法3-Akshare] 正在获取个股信息页的公告...")
-                    with network_optimizer.apply():
-                        import akshare as ak
-                        # 使用个股新闻数据作为公告的替代（虽然不完全准确，但能提供一定信息）
-                        df = ak.stock_news_em(symbol=symbol)
-                        
-                        if df is not None and not df.empty:
-                            print(f"   ✓ 获取到 {len(df)} 条新闻数据")
-                            
-                            for idx, row in df.iterrows():
-                                try:
-                                    date_str = str(row.get('发布时间', row.get('时间', '')))
-                                    if date_str and date_str != 'nan':
-                                        pub_date = pd.to_datetime(date_str)
-                                        # 只保留时间范围内的数据
-                                        if pub_date >= start_date and pub_date <= end_date:
-                                            # 检查标题中是否包含"公告"等关键词
-                                            title = str(row.get('新闻标题', row.get('标题', 'N/A')))
-                                            if any(keyword in title for keyword in ['公告', '披露', '报告', '预告', '公告']):
-                                                announcement = {
-                                                    '日期': pub_date.strftime('%Y-%m-%d'),
-                                                    '公告标题': title,
-                                                    '公告类型': '新闻公告',
-                                                    '公告摘要': str(row.get('新闻内容', ''))[:200] if row.get('新闻内容') else ''
-                                                }
-                                                announcements.append(announcement)
-                                except:
-                                    continue
-                            
-                            if announcements:
-                                data["source"] = "akshare"
-                                print(f"   [方法3] ✅ 筛选出 {len(announcements)} 条相关公告信息")
-                            else:
-                                print(f"   [方法3] ⚠️ 未找到包含公告关键词的新闻")
-                        else:
-                            print(f"   [方法3] ⚠️ 未获取到数据")
-                    
-                except Exception as e:
-                    debug_logger.warning(f"Akshare获取公告失败", error=e, symbol=symbol)
-                    print(f"   [方法3] ❌ 失败: {e}")
-            
-            # 整理结果
-            if announcements:
-                # 按日期排序（最新的在前）
-                announcements.sort(key=lambda x: x['日期'], reverse=True)
-                
-                data["announcements"] = announcements
-                data["data_success"] = True
-                data["count"] = len(announcements)
-                data["date_range"] = {
-                    "start": start_date.strftime('%Y-%m-%d'),
-                    "end": end_date.strftime('%Y-%m-%d')
+
+                if df_batch is None or df_batch.empty:
+                    break
+
+                all_rows.append(df_batch)
+                if len(df_batch) < limit:
+                    break
+                offset += limit
+
+            if not all_rows:
+                print("   ℹ️ 未查询到公告数据")
+                data["error"] = "未查询到公告数据"
+                return data
+
+            df = pd.concat(all_rows, ignore_index=True)
+            df = df.sort_values("ann_date", ascending=False)
+
+            announcements: List[Dict[str, Any]] = []
+            for _, row in df.iterrows():
+                ann_date = str(row.get("ann_date", ""))
+                ann_date_fmt = "N/A"
+                if ann_date:
+                    try:
+                        ann_date_fmt = datetime.strptime(ann_date, "%Y%m%d").strftime("%Y-%m-%d")
+                    except Exception:
+                        ann_date_fmt = ann_date
+
+                pdf_url = _resolve_pdf_url(row, ts_code, ann_date)
+                download_url = _cninfo_download_url(pdf_url) if pdf_url else None
+                announcement = {
+                    "日期": ann_date_fmt,
+                    "公告标题": str(row.get("title", "N/A")),
+                    "公告类型": str(row.get("ann_type", "N/A")),
+                    "公告摘要": str(row.get("content", ""))[:400] if pd.notna(row.get("content")) else "",
+                    "pdf_url": download_url or pdf_url or "N/A",
+                    "download_url": download_url or pdf_url or "N/A",
+                    "detail_url": pdf_url or "N/A",
+                    "原始数据": {k: row.get(k) for k in row.index},
                 }
-                print(f"   ✅ 最终成功获取 {len(announcements)} 条公告 (时间范围: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')})")
-            else:
-                print(f"   ℹ️ 所有数据源均未找到公告数据")
-                data["error"] = f"未找到最近{days}天的公告数据"
+                announcements.append(announcement)
+
+            if not announcements:
+                data["error"] = "公告数据为空"
+                print("   ℹ️ 公告数据为空")
+                return data
+
+            data["announcements"] = announcements
+            data["source"] = "tushare"
+            data["data_success"] = True
+
+            # 下载并解析最近5条公告PDF
+            pdf_analysis: List[Dict[str, Any]] = []
+            for ann in announcements[:5]:
+                pdf_url = ann.get("pdf_url")
+                analysis_entry = {
+                    "date": ann.get("日期"),
+                    "title": ann.get("公告标题"),
+                    "pdf_url": pdf_url,
+                    "text": None,
+                    "success": False,
+                }
+                if pdf_url and pdf_url != "N/A":
+                    pdf_text, saved_path = _download_and_parse_pdf(pdf_url, ann)
+                    if pdf_text:
+                        analysis_entry["text"] = pdf_text
+                        analysis_entry["success"] = True
+                    if saved_path:
+                        analysis_entry["saved_path"] = saved_path
+                    else:
+                        analysis_entry["text"] = "未能成功解析PDF内容（可能无文本或下载失败）。"
+                else:
+                    analysis_entry["text"] = "未提供PDF链接。"
+                pdf_analysis.append(analysis_entry)
+
+            data["pdf_analysis"] = pdf_analysis
+            analyzed_count = sum(1 for item in pdf_analysis if item.get("success"))
+            failed_entries = [item for item in pdf_analysis if not item.get("success")]
+            failed_count = len(failed_entries)
+            if analyzed_count:
+                print(f"   ✅ 成功获取 {len(announcements)} 条公告，其中 {analyzed_count} 条完成PDF内容解析")
+            if failed_count:
+                print(f"   ℹ️ {failed_count} 条公告缺少有效PDF或内容解析失败，可通过原始链接查看")
+                for item in failed_entries:
+                    print("      - PDF解析失败:", {
+                        "date": item.get("date"),
+                        "title": item.get("title"),
+                        "pdf_url": item.get("pdf_url"),
+                        "reason": item.get("text") or "未解析",
+                        "saved_path": item.get("saved_path"),
+                    })
+                print("   ℹ️ 本次公告URL列表:")
+                for ann in announcements:
+                    print("      *", ann.get("日期"), ann.get("公告标题"), ann.get("pdf_url"))
         
         except Exception as e:
-            debug_logger.error(f"获取公告失败", error=e, symbol=symbol, days=days)
-            print(f"   ❌ 获取公告失败: {e}")
-            import traceback
-            traceback.print_exc()
+            debug_logger.error("获取公告数据失败", error=str(e), symbol=symbol)
+            print(f"   ❌ 获取公告数据失败: {e}")
             data["error"] = str(e)
+            if "请指定正确的接口名" in str(e):
+                data["error"] = "Tushare 不支持 anns_d 接口，可能需要升级/授权。"
         
         elapsed_time = time_module.time() - start_time
-        debug_logger.info(f"公告数据获取完成", 
+        debug_logger.info(
+            "公告数据获取完成",
                          symbol=symbol, 
-                         success=data.get('data_success', False),
-                         count=data.get('count', 0),
-                         elapsed=f"{elapsed_time:.2f}s")
+            success=data.get("data_success", False),
+            count=len(data.get("announcements", [])),
+            elapsed=f"{elapsed_time:.2f}s",
+        )
         
         return data
     
@@ -1057,12 +1201,14 @@ class UnifiedDataAccess:
         """判断是否为中国A股"""
         return symbol.isdigit() and len(symbol) == 6
 
-    def get_chip_distribution_data(self, symbol: str, trade_date: str = None, current_price: float = None) -> Dict[str, Any]:
+    def get_chip_distribution_data(self, symbol: str, trade_date: str = None, current_price: float = None, analysis_date: Optional[str] = None) -> Dict[str, Any]:
         """获取筹码分布数据 - 使用Tushare的cyq_perf和cyq_chips接口（仅A股）
         
         Args:
             symbol: 股票代码（6位数字）
-            trade_date: 交易日期（格式：YYYYMMDD），默认最新交易日
+            trade_date: 交易日期（格式：YYYYMMDD），默认最新交易日（如果提供analysis_date，则优先使用analysis_date）
+            current_price: 当前价格（用于筹码分析）
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'，如果提供则使用该日期作为交易日期
             
         Returns:
             包含筹码分布信息的字典，包括：
@@ -1071,7 +1217,10 @@ class UnifiedDataAccess:
             - latest_date: 最新数据日期
         """
         start_time = time_module.time()
-        debug_logger.info(f"开始获取筹码分布数据", symbol=symbol, trade_date=trade_date, method="get_chip_distribution_data")
+        # 如果提供了analysis_date，优先使用它作为trade_date
+        if analysis_date and not trade_date:
+            trade_date = analysis_date
+        debug_logger.info(f"开始获取筹码分布数据", symbol=symbol, trade_date=trade_date, analysis_date=analysis_date, method="get_chip_distribution_data")
         print(f"🎯 [UnifiedDataAccess] 正在获取 {symbol} 的筹码分布数据...")
         
         data = {
@@ -1100,7 +1249,7 @@ class UnifiedDataAccess:
             print(f"   [Tushare] 正在获取筹码分布数据...")
             ts_code = data_source_manager._convert_to_ts_code(symbol)
             
-            # 如果没有指定日期，使用最新交易日
+            # 如果没有指定日期，使用最新交易日（或analysis_date）
             if not trade_date:
                 trade_date = datetime.now().strftime('%Y%m%d')
             
@@ -1330,10 +1479,14 @@ class UnifiedDataAccess:
         
         return is_trading
     
-    def _get_appropriate_trade_date(self) -> str:
+    def _get_appropriate_trade_date(self, analysis_date: Optional[str] = None) -> str:
         """获取合适的交易日（根据日期和时间判断）
         
+        Args:
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'，如果提供则基于该日期查找交易日
+        
         规则：
+        - 如果提供了analysis_date，直接返回该日期（或最近的交易日）
         - 非交易日 → 返回上一交易日
         - 交易日开盘前（<9:30）→ 返回上一交易日
         - 交易日开盘后（>=9:30）→ 返回当日
@@ -1341,6 +1494,30 @@ class UnifiedDataAccess:
         Returns:
             str: 交易日期（格式：YYYYMMDD）
         """
+        # 如果提供了analysis_date，使用它作为基准日期
+        if analysis_date:
+            try:
+                base_date = datetime.strptime(analysis_date, '%Y%m%d')
+                # 检查该日期是否为交易日
+                if self._is_trading_day(base_date):
+                    debug_logger.debug("使用指定的分析日期", analysis_date=analysis_date)
+                    return analysis_date
+                else:
+                    # 如果不是交易日，往前找最近的交易日
+                    debug_logger.debug("分析日期非交易日，查找最近的交易日", analysis_date=analysis_date)
+                    for days_back in range(1, 8):
+                        prev_date = base_date - timedelta(days=days_back)
+                        if self._is_trading_day(prev_date):
+                            trade_date = prev_date.strftime('%Y%m%d')
+                            debug_logger.debug("找到最近的交易日", trade_date=trade_date, analysis_date=analysis_date)
+                            return trade_date
+                    # 如果找不到，返回原日期
+                    return analysis_date
+            except Exception as e:
+                debug_logger.warning("解析analysis_date失败，使用当前时间", error=e, analysis_date=analysis_date)
+                # 如果解析失败，继续使用当前时间逻辑
+        
+        # 使用当前时间逻辑
         now = datetime.now()
         current_time = now.time()
         current_date = now.date()

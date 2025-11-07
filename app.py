@@ -675,7 +675,9 @@ def main():
             if 'just_completed' in st.session_state:
                 del st.session_state.just_completed
 
-            run_stock_analysis(stock_input, period)
+            # 获取分析时间点（如果设置了历史分析）
+            analysis_date = st.session_state.get('current_analysis_date')
+            run_stock_analysis(stock_input, period, analysis_date=analysis_date)
 
         else:
             # 批量股票分析
@@ -778,13 +780,35 @@ def is_supported_symbol(symbol: str) -> bool:
     return False
 
 @st.cache_data(ttl=300)  # 缓存5分钟
-def get_stock_data(symbol, period):
+def get_stock_data(symbol, period, analysis_date=None):
     """获取股票数据（带缓存）- 使用统一数据访问接口"""
-    debug_logger.info("get_stock_data开始", symbol=symbol, period=period)
+    # 从 session_state 获取 analysis_date（如果未提供）
+    if analysis_date is None:
+        analysis_date = st.session_state.get('current_analysis_date')
+    
+    debug_logger.info("get_stock_data开始", symbol=symbol, period=period, analysis_date=analysis_date)
     
     unified_fetcher = UnifiedDataAccess()
-    stock_info = unified_fetcher.get_stock_info(symbol)
-    stock_data = unified_fetcher.get_stock_data(symbol, period)
+    # 确保传递 analysis_date 参数（即使为 None）
+    try:
+        stock_info = unified_fetcher.get_stock_info(symbol, analysis_date=analysis_date)
+    except TypeError as e:
+        # 如果方法不支持 analysis_date 参数，尝试不使用该参数（向后兼容）
+        if 'analysis_date' in str(e):
+            debug_logger.warning("get_stock_info不支持analysis_date参数，使用旧版本调用", error=e)
+            stock_info = unified_fetcher.get_stock_info(symbol)
+        else:
+            raise
+    
+    try:
+        stock_data = unified_fetcher.get_stock_data(symbol, period, analysis_date=analysis_date)
+    except TypeError as e:
+        # 如果方法不支持 analysis_date 参数，尝试不使用该参数（向后兼容）
+        if 'analysis_date' in str(e):
+            debug_logger.warning("get_stock_data不支持analysis_date参数，使用旧版本调用", error=e)
+            stock_data = unified_fetcher.get_stock_data(symbol, period)
+        else:
+            raise
     
     debug_logger.data_info("get_stock_data原始返回", stock_data)
 
@@ -875,7 +899,7 @@ def parse_stock_list(stock_input):
 
     return unique_list
 
-def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None, selected_model='deepseek-chat'):
+def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None, selected_model='deepseek-chat', analysis_date=None):
     """单个股票分析（用于批量分析）
 
     Args:
@@ -883,9 +907,14 @@ def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None,
         period: 数据周期
         enabled_analysts_config: 分析师配置字典
         selected_model: 选择的AI模型
+        analysis_date: 分析时间点（可选）
 
     返回分析结果或错误信息
     """
+    # 从 session_state 获取 analysis_date（如果未提供）
+    if analysis_date is None:
+        analysis_date = st.session_state.get('current_analysis_date')
+    
     try:
         # 使用默认配置
         if enabled_analysts_config is None:
@@ -902,7 +931,7 @@ def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None,
             }
 
         # 1. 获取股票数据
-        stock_info, stock_data, indicators = get_stock_data(symbol, period)
+        stock_info, stock_data, indicators = get_stock_data(symbol, period, analysis_date=analysis_date)
 
         if "error" in stock_info:
             return {"symbol": symbol, "error": stock_info['error'], "success": False}
@@ -912,14 +941,14 @@ def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None,
 
         # 2. 获取财务数据
         unified_fetcher = UnifiedDataAccess()
-        financial_data = unified_fetcher.get_financial_data(symbol)
+        financial_data = unified_fetcher.get_financial_data(symbol, analysis_date=analysis_date)
 
         # 2.5 获取季报数据（仅A股）
         quarterly_data = None
         enable_fundamental = enabled_analysts_config.get('fundamental', True)
         if enable_fundamental and unified_fetcher._is_chinese_stock(symbol):
             try:
-                quarterly_data = unified_fetcher.get_quarterly_reports(symbol)
+                quarterly_data = unified_fetcher.get_quarterly_reports(symbol, analysis_date=analysis_date)
             except:
                 pass
 
@@ -932,7 +961,12 @@ def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None,
         fund_flow_data = None
         if enable_fund_flow and unified_fetcher._is_chinese_stock(symbol):
             try:
-                fund_flow_data = unified_fetcher.get_fund_flow_data(symbol)
+                fund_flow_data = unified_fetcher.get_fund_flow_data(symbol, analysis_date=analysis_date)
+                margin_history = unified_fetcher.get_margin_trading_history(symbol, days=5, analysis_date=analysis_date)
+                if margin_history:
+                    if fund_flow_data is None:
+                        fund_flow_data = {"symbol": symbol, "data_success": False}
+                    fund_flow_data["margin_trading_history"] = margin_history
             except:
                 pass
 
@@ -940,7 +974,7 @@ def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None,
         sentiment_data = None
         if enable_sentiment and unified_fetcher._is_chinese_stock(symbol):
             try:
-                sentiment_data = unified_fetcher.get_market_sentiment_data(symbol, stock_data)
+                sentiment_data = unified_fetcher.get_market_sentiment_data(symbol, stock_data, analysis_date=analysis_date)
             except:
                 pass
 
@@ -948,16 +982,16 @@ def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None,
         news_data = None
         if enable_news and unified_fetcher._is_chinese_stock(symbol):
             try:
-                news_data = unified_fetcher.get_stock_news(symbol)
+                news_data = unified_fetcher.get_stock_news(symbol, analysis_date=analysis_date)
             except:
                 pass
 
-        # 5.5 获取风险数据（限售解禁、大股东减持、重要事件，可选）
+        # 5.5 获取风险数据（限售解禁/股东增减持/公告，统一数据接口）
         risk_data = None
         enable_risk = enabled_analysts_config.get('risk', True)
         if enable_risk and unified_fetcher._is_chinese_stock(symbol):
             try:
-                risk_data = unified_fetcher.get_risk_data(symbol)
+                risk_data = unified_fetcher.get_risk_data(symbol, analysis_date=analysis_date)
             except:
                 pass
 
@@ -980,14 +1014,14 @@ def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None,
             try:
                 # 获取机构研报数据
                 if enable_research:
-                    research_data = unified_fetcher.get_research_reports_data(symbol, days=180)  # 6个月数据
+                    research_data = unified_fetcher.get_research_reports_data(symbol, days=180, analysis_date=analysis_date)  # 6个月数据
                     debug_logger.debug("批量分析-获取研报数据",
                                      symbol=symbol,
                                      success=research_data.get('data_success', False) if research_data else False)
                 
                 # 获取公告数据
                 if enable_announcement:
-                    announcement_data = unified_fetcher.get_announcement_data(symbol, days=30)
+                    announcement_data = unified_fetcher.get_announcement_data(symbol, days=30, analysis_date=analysis_date)
                     debug_logger.debug("批量分析-获取公告数据",
                                      symbol=symbol,
                                      success=announcement_data.get('data_success', False) if announcement_data else False)
@@ -996,7 +1030,7 @@ def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None,
                 if enable_chip:
                     # 传递当前价格用于筹码分析
                     current_price = stock_info.get('current_price') if stock_info else None
-                    chip_data = unified_fetcher.get_chip_distribution_data(symbol, current_price=current_price)
+                    chip_data = unified_fetcher.get_chip_distribution_data(symbol, current_price=current_price, analysis_date=analysis_date)
                     debug_logger.debug("批量分析-获取筹码数据",
                                      symbol=symbol,
                                      success=chip_data.get('data_success', False) if chip_data else False)
@@ -1094,7 +1128,9 @@ def run_batch_analysis(stock_list, period, batch_mode="顺序分析"):
         def analyze_with_progress(symbol):
             """包装分析函数，不在线程中访问Streamlit上下文"""
             try:
-                result = analyze_single_stock_for_batch(symbol, period, enabled_analysts_config, selected_model)
+                # 获取分析时间点（如果设置了历史分析）
+                analysis_date = st.session_state.get('current_analysis_date')
+                result = analyze_single_stock_for_batch(symbol, period, enabled_analysts_config, selected_model, analysis_date=analysis_date)
                 with lock:
                     completed[0] += 1
                     progress_status[0][symbol] = result
@@ -1143,7 +1179,9 @@ def run_batch_analysis(stock_list, period, batch_mode="顺序分析"):
             status_text.text(f"🔍 [{i}/{total}] 正在分析 {symbol}...")
 
             try:
-                result = analyze_single_stock_for_batch(symbol, period, enabled_analysts_config, selected_model)
+                # 获取分析时间点（如果设置了历史分析）
+                analysis_date = st.session_state.get('current_analysis_date')
+                result = analyze_single_stock_for_batch(symbol, period, enabled_analysts_config, selected_model, analysis_date=analysis_date)
             except Exception as e:
                 result = {"symbol": symbol, "error": str(e), "success": False}
 
@@ -1187,10 +1225,13 @@ def run_batch_analysis(stock_list, period, batch_mode="顺序分析"):
     # 自动显示结果
     st.rerun()
 
-def run_stock_analysis(symbol, period):
+def run_stock_analysis(symbol, period, analysis_date=None):
     """运行股票分析"""
+    # 从 session_state 获取 analysis_date（如果未提供）
+    if analysis_date is None:
+        analysis_date = st.session_state.get('current_analysis_date')
     
-    debug_logger.step(1, "开始股票分析流程", symbol=symbol, period=period)
+    debug_logger.step(1, "开始股票分析流程", symbol=symbol, period=period, analysis_date=analysis_date)
 
     # 进度条
     progress_bar = st.progress(0)
@@ -1201,9 +1242,9 @@ def run_stock_analysis(symbol, period):
         status_text.text("📈 正在获取股票数据...")
         progress_bar.progress(10)
         
-        debug_logger.info("开始获取股票基础数据", symbol=symbol, period=period)
+        debug_logger.info("开始获取股票基础数据", symbol=symbol, period=period, analysis_date=analysis_date)
 
-        stock_info, stock_data, indicators = get_stock_data(symbol, period)
+        stock_info, stock_data, indicators = get_stock_data(symbol, period, analysis_date=analysis_date)
         
         debug_logger.data_info("stock_info_result", stock_info)
         debug_logger.data_info("stock_data_result", stock_data)
@@ -1228,7 +1269,7 @@ def run_stock_analysis(symbol, period):
         # 2. 获取财务数据
         status_text.text("📊 正在获取财务数据...")
         unified_fetcher = UnifiedDataAccess()  # 使用统一数据访问接口
-        financial_data = unified_fetcher.get_financial_data(symbol)
+        financial_data = unified_fetcher.get_financial_data(symbol, analysis_date=analysis_date)
         progress_bar.progress(35)
 
         # 2.5 获取季报数据（仅在选择了基本面分析师且为A股时）
@@ -1237,7 +1278,7 @@ def run_stock_analysis(symbol, period):
         if enable_fundamental and unified_fetcher._is_chinese_stock(symbol):
             status_text.text("📊 正在获取季报数据（akshare数据源）...")
             try:
-                quarterly_data = unified_fetcher.get_quarterly_reports(symbol)
+                quarterly_data = unified_fetcher.get_quarterly_reports(symbol, analysis_date=analysis_date)
                 if quarterly_data and quarterly_data.get('data_success'):
                     income_count = quarterly_data.get('income_statement', {}).get('periods', 0) if quarterly_data.get('income_statement') else 0
                     balance_count = quarterly_data.get('balance_sheet', {}).get('periods', 0) if quarterly_data.get('balance_sheet') else 0
@@ -1262,7 +1303,12 @@ def run_stock_analysis(symbol, period):
         if enable_fund_flow and unified_fetcher._is_chinese_stock(symbol):
             status_text.text("💰 正在获取资金流向数据（akshare数据源）...")
             try:
-                fund_flow_data = unified_fetcher.get_fund_flow_data(symbol)
+                fund_flow_data = unified_fetcher.get_fund_flow_data(symbol, analysis_date=analysis_date)
+                margin_history = unified_fetcher.get_margin_trading_history(symbol, days=5, analysis_date=analysis_date)
+                if margin_history:
+                    if fund_flow_data is None:
+                        fund_flow_data = {"symbol": symbol, "data_success": False}
+                    fund_flow_data["margin_trading_history"] = margin_history
                 if fund_flow_data and fund_flow_data.get('data_success'):
                     days = fund_flow_data.get('fund_flow_data', {}).get('days', 0) if fund_flow_data.get('fund_flow_data') else 0
                     st.info(f"✅ 成功获取 {days} 个交易日的资金流向数据")
@@ -1280,7 +1326,7 @@ def run_stock_analysis(symbol, period):
         if enable_sentiment and unified_fetcher._is_chinese_stock(symbol):
             status_text.text("📊 正在获取市场情绪数据（ARBR等指标）...")
             try:
-                sentiment_data = unified_fetcher.get_market_sentiment_data(symbol, stock_data)
+                sentiment_data = unified_fetcher.get_market_sentiment_data(symbol, stock_data, analysis_date=analysis_date)
                 if sentiment_data and sentiment_data.get('data_success'):
                     st.info("✅ 成功获取市场情绪数据（ARBR、换手率、涨跌停等）")
                 else:
@@ -1297,7 +1343,7 @@ def run_stock_analysis(symbol, period):
         if enable_news and unified_fetcher._is_chinese_stock(symbol):
             status_text.text("📰 正在获取新闻数据...")
             try:
-                news_data = unified_fetcher.get_stock_news(symbol)
+                news_data = unified_fetcher.get_stock_news(symbol, analysis_date=analysis_date)
                 if news_data and news_data.get('data_success'):
                     news_count = news_data.get('news_data', {}).get('count', 0) if news_data.get('news_data') else 0
                     st.info(f"✅ 成功从东方财富获取个股 {news_count} 条新闻")
@@ -1316,7 +1362,7 @@ def run_stock_analysis(symbol, period):
         if enable_risk and unified_fetcher._is_chinese_stock(symbol):
             status_text.text("⚠️ 正在获取风险数据（限售解禁、大股东减持、重要事件）...")
             try:
-                risk_data = unified_fetcher.get_risk_data(symbol)
+                risk_data = unified_fetcher.get_risk_data(symbol, analysis_date=analysis_date)
                 if risk_data and risk_data.get('data_success'):
                     # 统计获取到的风险数据类型
                     risk_types = []
@@ -1379,7 +1425,7 @@ def run_stock_analysis(symbol, period):
             if enable_research:
                 status_text.text("📑 正在获取机构研报数据...")
                 try:
-                    research_data = unified_fetcher.get_research_reports_data(symbol, days=180)  # 6个月数据
+                    research_data = unified_fetcher.get_research_reports_data(symbol, days=180, analysis_date=analysis_date)  # 6个月数据
                     if research_data and research_data.get('data_success'):
                         research_count = research_data.get('count', 0)
                         st.info(f"✅ 成功获取机构研报 {research_count} 条")
@@ -1395,7 +1441,7 @@ def run_stock_analysis(symbol, period):
             if enable_announcement:
                 status_text.text("📢 正在获取公告数据...")
                 try:
-                    announcement_data = unified_fetcher.get_announcement_data(symbol, days=30)
+                    announcement_data = unified_fetcher.get_announcement_data(symbol, days=30, analysis_date=analysis_date)
                     if announcement_data and announcement_data.get('data_success'):
                         announcement_count = announcement_data.get('count', 0)
                         st.info(f"✅ 成功获取公告 {announcement_count} 条")
@@ -1413,7 +1459,7 @@ def run_stock_analysis(symbol, period):
                 try:
                     # 传递当前价格用于筹码分析
                     current_price = stock_info.get('current_price') if stock_info else None
-                    chip_data = unified_fetcher.get_chip_distribution_data(symbol, current_price=current_price)
+                    chip_data = unified_fetcher.get_chip_distribution_data(symbol, current_price=current_price, analysis_date=analysis_date)
                     if chip_data and chip_data.get('data_success'):
                         st.info("✅ 成功获取筹码分布数据")
                     else:

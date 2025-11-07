@@ -1,469 +1,518 @@
 """
-风险数据获取模块
-使用pywencai获取股票风险相关信息：
-1. 限售解禁数据
-2. 大股东减持公告
-3. 近期重要事件
+风险数据获取模块（统一数据访问）
+全部通过 Tushare（统一数据访问模块）获取：
+1. 限售解禁（share_float）
+2. 大股东增减持（stk_holdertrade）
+3. 近期重要公告（anns）
 """
 
-import pywencai
-import pandas as pd
-from typing import Dict, Any
-import time
-import warnings
-import os
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, List
 
-# 屏蔽pywencai的Node.js警告信息（不影响功能）
-warnings.filterwarnings('ignore', category=DeprecationWarning)
-os.environ['PYTHONWARNINGS'] = 'ignore::DeprecationWarning'
-os.environ['NODE_NO_WARNINGS'] = '1'  # 屏蔽Node.js警告
+import pandas as pd
+
+from data_source_manager import data_source_manager
+from network_optimizer import network_optimizer
 
 
 class RiskDataFetcher:
-    """风险数据获取类"""
-    
-    def __init__(self):
-        """初始化"""
+    """风险数据获取类（统一数据接口）"""
+
+    def __init__(self) -> None:
         pass
-    
-    def get_risk_data(self, symbol: str) -> Dict[str, Any]:
-        """
-        获取股票风险相关数据
-        
-        Args:
-            symbol: 股票代码（如：600000）
-            
-        Returns:
-            包含风险数据的字典
-        """
-        print(f"\n正在获取 {symbol} 的风险数据...")
-        
-        risk_data = {
-            'symbol': symbol,
-            'data_success': False,
-            'lifting_ban': None,  # 限售解禁数据
-            'shareholder_reduction': None,  # 大股东减持数据
-            'important_events': None,  # 重要事件数据
-            'error': None
-        }
-        
-        try:
-            # 1. 获取限售解禁数据
-            print("   查询限售解禁数据...")
-            lifting_ban = self._get_lifting_ban_data(symbol)
-            risk_data['lifting_ban'] = lifting_ban
-            if lifting_ban and lifting_ban.get('has_data'):
-                print(f"   获取到限售解禁数据")
-            else:
-                print(f"   暂无限售解禁数据")
-            
-            time.sleep(1)  # 避免请求过快
-            
-            # 2. 获取大股东减持公告
-            print("   查询大股东减持公告...")
-            reduction = self._get_shareholder_reduction_data(symbol)
-            risk_data['shareholder_reduction'] = reduction
-            if reduction and reduction.get('has_data'):
-                print(f"   获取到大股东减持数据")
-            else:
-                print(f"   暂无大股东减持数据")
-            
-            time.sleep(1)  # 避免请求过快
-            
-            # 3. 获取近期重要事件
-            print("   查询近期重要事件...")
-            events = self._get_important_events_data(symbol)
-            risk_data['important_events'] = events
-            if events and events.get('has_data'):
-                print(f"   获取到重要事件数据")
-            else:
-                print(f"   暂无重要事件数据")
-            
-            # 如果至少有一个数据源成功，则认为获取成功
-            if (lifting_ban and lifting_ban.get('has_data')) or \
-               (reduction and reduction.get('has_data')) or \
-               (events and events.get('has_data')):
-                risk_data['data_success'] = True
-                print(f"风险数据获取完成")
-            else:
-                print(f"未获取到风险相关数据")
-                
-        except Exception as e:
-            print(f"风险数据获取失败: {str(e)}")
-            risk_data['error'] = str(e)
-        
-        return risk_data
-    
-    def _get_lifting_ban_data(self, symbol: str) -> Dict[str, Any]:
-        """获取限售解禁数据"""
+
+    # ------------------------------------------------------------------
+    # 对外主方法
+    # ------------------------------------------------------------------
+    def get_risk_data(self, symbol: str, analysis_date: Optional[str] = None) -> Dict[str, Any]:
+        print(f"\n正在获取 {symbol} 的风险数据（统一数据接口）...")
+
         result = {
-            'has_data': False,
-            'query': f"{symbol}限售解禁",
-            'data': None,
-            'summary': None
+            "symbol": symbol,
+            "data_success": False,
+            "source": "unified_data_access",
+            "lifting_ban": None,
+            "shareholder_reduction": None,
+            "important_events": None,
+            "liquidity_metrics": None,
+            "error": None
         }
         
         try:
-            # 构建问句
-            query = f"{symbol}限售解禁"
-            
-            # 使用pywencai查询
-            response = pywencai.get(query=query, loop=True)
-            
-            if response is None:
-                return result
-            
-            # 处理返回结果
-            df_result = self._convert_to_dataframe(response)
-            
-            if df_result is None or df_result.empty:
-                return result
-            
-            # 提取有用的信息
-            result['has_data'] = True
-            result['data'] = df_result
-            
-            # 生成摘要
-            summary = []
-            
-            # 尝试提取关键字段
-            if '解禁时间' in df_result.columns or '限售解禁日' in df_result.columns:
-                time_col = '解禁时间' if '解禁时间' in df_result.columns else '限售解禁日'
-                summary.append(f"发现 {len(df_result)} 条解禁记录")
-                
-                # 提取最近的解禁记录
-                recent_records = df_result.head(5)
-                for idx, row in recent_records.iterrows():
-                    record_info = []
-                    if time_col in row.index:
-                        record_info.append(f"日期: {row[time_col]}")
-                    if '解禁股数' in row.index:
-                        record_info.append(f"解禁股数: {row['解禁股数']}")
-                    if '解禁市值' in row.index:
-                        record_info.append(f"解禁市值: {row['解禁市值']}")
-                    if '股东名称' in row.index:
-                        record_info.append(f"股东: {row['股东名称']}")
-                    
-                    if record_info:
-                        summary.append(" | ".join(record_info))
+            base_date = datetime.strptime(analysis_date, "%Y%m%d") if analysis_date else datetime.now()
+
+            lifting_ban = self._get_lifting_ban_data(symbol, base_date)
+            result["lifting_ban"] = lifting_ban
+
+            reduction = self._get_shareholder_reduction_data(symbol, base_date)
+            result["shareholder_reduction"] = reduction
+
+            events = self._get_important_events_data(symbol, base_date)
+            result["important_events"] = events
+
+            liquidity_metrics = self._get_liquidity_metrics(symbol, base_date)
+            result["liquidity_metrics"] = liquidity_metrics
+
+            if ((lifting_ban and lifting_ban.get("has_data")) or
+                (reduction and reduction.get("has_data")) or
+                (events and events.get("has_data")) or
+                (liquidity_metrics and liquidity_metrics.get("has_data"))):
+                result["data_success"] = True
+                print("✅ 风险数据获取完成（统一数据接口）")
             else:
-                # 如果没有标准字段，只记录有数据
-                summary.append(f"获取到 {len(df_result)} 条相关记录")
-            
-            result['summary'] = "\n".join(summary) if summary else "有限售解禁数据"
+                print("⚠️ 未获取到风险相关数据")
             
         except Exception as e:
-            result['error'] = str(e)
+            print(f"风险数据获取失败: {e}")
+            result["error"] = str(e)
         
         return result
     
-    def _get_shareholder_reduction_data(self, symbol: str) -> Dict[str, Any]:
-        """获取大股东减持公告数据"""
-        result = {
-            'has_data': False,
-            'query': f"{symbol}大股东减持公告",
-            'data': None,
-            'summary': None
+    # ------------------------------------------------------------------
+    # 限售解禁
+    # ------------------------------------------------------------------
+    def _get_lifting_ban_data(self, symbol: str, base_date: datetime) -> Dict[str, Any]:
+        data = {
+            "has_data": False,
+            "records": [],
+            "summary": None,
+            "source": "tushare_share_float",
         }
-        
+
+        if not data_source_manager.tushare_available:
+            return data
+
         try:
-            # 构建问句
-            query = f"{symbol}大股东减持公告"
-            
-            # 使用pywencai查询
-            response = pywencai.get(query=query, loop=True)
-            
-            if response is None:
-                return result
-            
-            # 处理返回结果
-            df_result = self._convert_to_dataframe(response)
-            
-            if df_result is None or df_result.empty:
-                return result
-            
-            # 提取有用的信息
-            result['has_data'] = True
-            result['data'] = df_result
-            
-            # 生成摘要
-            summary = []
-            
-            # 尝试提取关键字段
-            if '公告日期' in df_result.columns or '减持日期' in df_result.columns:
-                date_col = '公告日期' if '公告日期' in df_result.columns else '减持日期'
-                summary.append(f"发现 {len(df_result)} 条减持公告")
-                
-                # 提取最近的减持记录
-                recent_records = df_result.head(5)
-                for idx, row in recent_records.iterrows():
-                    record_info = []
-                    if date_col in row.index:
-                        record_info.append(f"日期: {row[date_col]}")
-                    if '股东名称' in row.index:
-                        record_info.append(f"股东: {row['股东名称']}")
-                    if '减持股数' in row.index:
-                        record_info.append(f"减持股数: {row['减持股数']}")
-                    if '减持比例' in row.index:
-                        record_info.append(f"减持比例: {row['减持比例']}")
-                    
-                    if record_info:
-                        summary.append(" | ".join(record_info))
+            ts_code = data_source_manager._convert_to_ts_code(symbol)
+
+            def fetch_window(start_dt: datetime, end_dt: datetime, category: str) -> List[Dict[str, Any]]:
+                with network_optimizer.apply():
+                    df_window = data_source_manager.tushare_api.share_float(
+                        ts_code=ts_code,
+                        start_date=start_dt.strftime("%Y%m%d"),
+                        end_date=end_dt.strftime("%Y%m%d"),
+                    )
+
+                records_window: List[Dict[str, Any]] = []
+                if df_window is None or df_window.empty:
+                    return records_window
+
+                df_window["float_date"] = pd.to_datetime(df_window["float_date"])
+                df_window = df_window.sort_values("float_date")
+
+                for _, row in df_window.iterrows():
+                    float_dt = row["float_date"].strftime("%Y-%m-%d")
+                    records_window.append({
+                        "float_date": float_dt,
+                        "ann_date": self._fmt_date(row.get("ann_date")),
+                        "holder_name": row.get("holder_name"),
+                        "share_type": row.get("share_type"),
+                        "float_share": self._safe_float(row.get("float_share"), scale=10000),
+                        "float_ratio": self._safe_float(row.get("float_ratio")),
+                        "category": category,
+                    })
+                return records_window
+
+            upcoming_records = fetch_window(base_date, base_date + timedelta(days=365), "upcoming")
+            history_records = []
+            if not upcoming_records:
+                # 若未来无数据，为确保风险分析有素材，则回溯过去一年
+                history_records = fetch_window(base_date - timedelta(days=365), base_date, "history")
             else:
-                # 如果没有标准字段，只记录有数据
-                summary.append(f"获取到 {len(df_result)} 条相关记录")
-            
-            result['summary'] = "\n".join(summary) if summary else "有大股东减持数据"
-            
+                # 同时补充最近一年的历史，便于趋势判断
+                history_records = fetch_window(base_date - timedelta(days=365), base_date, "history")
+
+            combined_records = upcoming_records + history_records
+            if not combined_records:
+                return data
+
+            summary_lines = []
+            future_count = len(upcoming_records)
+            history_count = len(history_records)
+            if future_count:
+                summary_lines.append(f"未来一年预计有 {future_count} 笔限售解禁")
+                summary_lines.append(
+                    f"最近未来解禁：{upcoming_records[0]['float_date']}，股东 {upcoming_records[0].get('holder_name', '未知')}"
+                )
+            if history_count:
+                summary_lines.append(f"过去一年已完成 {history_count} 笔限售解禁")
+                summary_lines.append(
+                    f"最近历史解禁：{history_records[-1]['float_date']}，股东 {history_records[-1].get('holder_name', '未知')}"
+                )
+
+            data["has_data"] = True
+            data["records"] = combined_records
+            data["summary"] = "\n".join(summary_lines)
         except Exception as e:
-            result['error'] = str(e)
-        
-        return result
-    
-    def _get_important_events_data(self, symbol: str) -> Dict[str, Any]:
-        """获取近期重要事件数据"""
-        result = {
-            'has_data': False,
-            'query': f"{symbol}近期重要事件",
-            'data': None,
-            'summary': None
+            data["error"] = str(e)
+
+        return data
+
+    # ------------------------------------------------------------------
+    # 股东增减持
+    # ------------------------------------------------------------------
+    def _get_shareholder_reduction_data(self, symbol: str, base_date: datetime) -> Dict[str, Any]:
+        data = {
+            "has_data": False,
+            "records": [],
+            "summary": None,
+            "source": "tushare_stk_holdertrade",
         }
-        
+
+        if not data_source_manager.tushare_available:
+            return data
+
         try:
-            # 构建问句
-            query = f"{symbol}近期重要事件"
-            
-            # 使用pywencai查询
-            response = pywencai.get(query=query, loop=True)
-            
-            if response is None:
-                return result
-            
-            # 处理返回结果
-            df_result = self._convert_to_dataframe(response)
-            
-            if df_result is None or df_result.empty:
-                return result
-            
-            # 提取有用的信息
-            result['has_data'] = True
-            result['data'] = df_result
-            
-            # 生成摘要
-            summary = []
-            
-            # 尝试提取关键字段
-            if '事件时间' in df_result.columns or '公告日期' in df_result.columns:
-                time_col = '事件时间' if '事件时间' in df_result.columns else '公告日期'
-                summary.append(f"发现 {len(df_result)} 条重要事件")
-                
-                # 提取最近的事件
-                recent_events = df_result.head(10)
-                for idx, row in recent_events.iterrows():
-                    event_info = []
-                    if time_col in row.index:
-                        event_info.append(f"时间: {row[time_col]}")
-                    if '事件类型' in row.index:
-                        event_info.append(f"类型: {row['事件类型']}")
-                    if '事件内容' in row.index:
-                        content = str(row['事件内容'])[:100]  # 限制长度
-                        event_info.append(f"内容: {content}")
-                    elif '标题' in row.index:
-                        title = str(row['标题'])[:100]
-                        event_info.append(f"标题: {title}")
-                    
-                    if event_info:
-                        summary.append(" | ".join(event_info))
-            else:
-                # 如果没有标准字段，只记录有数据
-                summary.append(f"获取到 {len(df_result)} 条相关记录")
-            
-            result['summary'] = "\n".join(summary) if summary else "有重要事件数据"
-            
+            ts_code = data_source_manager._convert_to_ts_code(symbol)
+            end_date = base_date.strftime("%Y%m%d")
+            start_date = (base_date - timedelta(days=365)).strftime("%Y%m%d")
+
+            with network_optimizer.apply():
+                df = data_source_manager.tushare_api.stk_holdertrade(
+                    ts_code=ts_code,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+
+            if df is None or df.empty:
+                return data
+
+            df["ann_date"] = pd.to_datetime(df["ann_date"])
+            df = df.sort_values("ann_date", ascending=False)
+
+            records: List[Dict[str, Any]] = []
+            for _, row in df.head(30).iterrows():
+                records.append({
+                    "ann_date": row["ann_date"].strftime("%Y-%m-%d"),
+                    "holder_name": row.get("holder_name"),
+                    "trade_type": row.get("trade_type"),
+                    "change_vol": self._safe_float(row.get("change_vol")),
+                    "change_ratio": self._safe_float(row.get("change_ratio")),
+                    "after_share": self._safe_float(row.get("after_share")),
+                    "after_ratio": self._safe_float(row.get("after_ratio")),
+                })
+
+            sells = df[df.get("change_vol", 0) < 0]
+            summary = [f"近一年公告的股东变动记录共 {len(df)} 条"]
+            if not sells.empty:
+                summary.append(
+                    f"其中减持 {len(sells)} 次，最近一次 {sells.iloc[0]['ann_date'].strftime('%Y-%m-%d')}"
+                )
+
+            data["has_data"] = True
+            data["records"] = records
+            data["summary"] = "\n".join(summary)
         except Exception as e:
-            result['error'] = str(e)
-        
-        return result
-    
-    def _convert_to_dataframe(self, result) -> pd.DataFrame:
-        """将pywencai返回结果转换为DataFrame"""
+            data["error"] = str(e)
+
+        return data
+
+    # ------------------------------------------------------------------
+    # 重要公告 / 事件
+    # ------------------------------------------------------------------
+    def _get_important_events_data(self, symbol: str, base_date: datetime) -> Dict[str, Any]:
+        data = {
+            "has_data": False,
+            "records": [],
+            "summary": None,
+            "source": "tushare_anns",
+        }
+
+        if not data_source_manager.tushare_available:
+            return data
+
         try:
-            if result is None:
-                return None
-            
-            df_result = None
-            
-            if isinstance(result, dict):
-                try:
-                    df_result = pd.DataFrame([result])
-                except Exception:
-                    return None
-            elif isinstance(result, pd.DataFrame):
-                df_result = result
+            ts_code = data_source_manager._convert_to_ts_code(symbol)
+            end_date = base_date.strftime("%Y%m%d")
+            start_date = (base_date - timedelta(days=120)).strftime("%Y%m%d")
+
+            limit = 50
+            offset = 0
+            batches: List[pd.DataFrame] = []
+            while True:
+                with network_optimizer.apply():
+                    df_batch = data_source_manager.tushare_api.anns_d(
+                        ts_code=ts_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        limit=limit,
+                        offset=offset,
+                        fields="ts_code,ann_date,ann_type,title,pdf_url,page_url,content"
+                    )
+
+                if df_batch is None or df_batch.empty:
+                    break
+
+                batches.append(df_batch)
+                if len(df_batch) < limit:
+                    break
+                offset += limit
+
+            if not batches:
+                return data
+
+            df = pd.concat(batches, ignore_index=True)
+            df["ann_date"] = pd.to_datetime(df["ann_date"])
+            df = df.sort_values("ann_date", ascending=False)
+
+            records: List[Dict[str, Any]] = []
+            for _, row in df.head(60).iterrows():
+                records.append({
+                    "ann_date": row["ann_date"].strftime("%Y-%m-%d"),
+                    "ann_type": row.get("ann_type"),
+                    "title": row.get("title"),
+                    "pdf_url": row.get("pdf_url") or row.get("page_url"),
+                    "summary": (row.get("content") or "")[:400],
+                })
+
+            summary = [f"最近120天披露 {len(df)} 条公告"]
+            if not df.empty:
+                latest = df.iloc[0]
+                summary.append(
+                    f"最新公告：{latest['ann_date'].strftime('%Y-%m-%d')}《{latest.get('title', '未知标题')}》"
+                )
+
+            data["has_data"] = True
+            data["records"] = records
+            data["summary"] = "\n".join(summary)
+        except Exception as e:
+            data["error"] = str(e)
+
+        return data
+
+    # ------------------------------------------------------------------
+    # 流动性指标
+    # ------------------------------------------------------------------
+    def _get_liquidity_metrics(self, symbol: str, base_date: datetime) -> Dict[str, Any]:
+        data = {
+            "has_data": False,
+            "records": [],
+            "summary": None,
+            "source": "tushare_daily_basic",
+        }
+
+        if not data_source_manager.tushare_available:
+            return data
+
+        try:
+            ts_code = data_source_manager._convert_to_ts_code(symbol)
+            end_date = base_date.strftime("%Y%m%d")
+            start_date = (base_date - timedelta(days=12)).strftime("%Y%m%d")  # 多取几天确保5个交易日
+
+            with network_optimizer.apply():
+                df_basic = data_source_manager.tushare_api.daily_basic(
+                    ts_code=ts_code,
+                    start_date=start_date,
+                    end_date=end_date,
+                    fields="trade_date,turnover_rate,turnover_rate_f,volume_ratio"
+                )
+
+            with network_optimizer.apply():
+                df_daily = data_source_manager.tushare_api.daily(
+                    ts_code=ts_code,
+                    start_date=start_date,
+                    end_date=end_date,
+                    fields="trade_date,vol,amount"
+                )
+
+            if df_basic is None or df_basic.empty:
+                return data
+
+            df_basic["trade_date"] = pd.to_datetime(df_basic["trade_date"])
+            df_basic = df_basic.sort_values("trade_date", ascending=False)
+
+            if df_daily is not None and not df_daily.empty:
+                df_daily["trade_date"] = pd.to_datetime(df_daily["trade_date"])
+                df_daily = df_daily.sort_values("trade_date", ascending=False)
+                df_merged = pd.merge(df_basic, df_daily, on="trade_date", how="left")
             else:
-                return None
-            
-            if df_result is None or df_result.empty:
-                return None
-            
-            # 处理嵌套结构（tableV1）
-            if 'tableV1' in df_result.columns and len(df_result.columns) == 1:
-                table_v1_data = df_result.iloc[0]['tableV1']
-                if isinstance(table_v1_data, pd.DataFrame):
-                    df_result = table_v1_data
-                elif isinstance(table_v1_data, list) and len(table_v1_data) > 0:
-                    df_result = pd.DataFrame(table_v1_data)
+                df_merged = df_basic.copy()
+
+            df_merged = df_merged.head(5)
+            if df_merged.empty:
+                return data
+
+            records: List[Dict[str, Any]] = []
+            latest_volume = None
+            avg_volume = None
+            for _, row in df_merged.iterrows():
+                trade_date = row["trade_date"].strftime("%Y-%m-%d")
+                turnover = self._safe_float(row.get("turnover_rate"))
+                turnover_f = self._safe_float(row.get("turnover_rate_f"))
+                volume_ratio = self._safe_float(row.get("volume_ratio"))
+                vol = self._safe_float(row.get("vol"))
+                amount = self._safe_float(row.get("amount"))
+
+                records.append({
+                    "trade_date": trade_date,
+                    "turnover_rate": turnover,
+                    "turnover_rate_f": turnover_f,
+                    "volume_ratio": volume_ratio,
+                    "volume": vol * 100 if vol is not None else None,  # Tushare返回手，转换为股
+                    "amount": amount,
+                })
+
+            if records:
+                latest_volume = records[0].get("volume")
+                volumes = [rec.get("volume") for rec in records if rec.get("volume") is not None]
+                avg_volume = sum(volumes[1:]) / (len(volumes[1:]) or 1) if len(volumes) > 1 else None
+
+                if avg_volume and latest_volume is not None and avg_volume != 0:
+                    change_ratio = (latest_volume - avg_volume) / avg_volume * 100
                 else:
-                    return None
-            
-            # 处理嵌套结构（title_content等单列嵌套）
-            # 如果只有一列，且该列的值是DataFrame，则展开
-            if len(df_result.columns) == 1:
-                col_name = df_result.columns[0]
-                first_value = df_result.iloc[0][col_name]
-                if isinstance(first_value, pd.DataFrame):
-                    print(f"   检测到嵌套DataFrame（列名: {col_name}），正在展开...")
-                    df_result = first_value
-            
-            return df_result if not df_result.empty else None
-            
+                    change_ratio = None
+
+                summary_lines = [
+                    f"最近5个交易日已获取流动性数据 {len(records)} 条",
+                    f"最新交易日：{records[0]['trade_date']}，换手率 {self._format_percentage(records[0].get('turnover_rate'))}，成交量 {self._format_number(latest_volume)}股",
+                ]
+                if change_ratio is not None:
+                    summary_lines.append(f"较前4日平均成交量变化：{change_ratio:+.2f}%")
+                if records[0].get("volume_ratio") is not None:
+                    summary_lines.append(f"量比：{records[0]['volume_ratio']:.2f}")
+
+                data["has_data"] = True
+                data["records"] = records
+                data["summary"] = "\n".join(summary_lines)
         except Exception as e:
-            print(f"   转换DataFrame时出错: {str(e)}")
-            return None
+            data["error"] = str(e)
+
+        return data
     
+    # ------------------------------------------------------------------
+    # 格式化输出
+    # ------------------------------------------------------------------
     def format_risk_data_for_ai(self, risk_data: Dict[str, Any]) -> str:
-        """格式化风险数据供AI分析使用 - 直接转换DataFrame为字符串"""
-        if not risk_data or not risk_data.get('data_success'):
+        if not risk_data or not risk_data.get("data_success"):
             return "未获取到风险数据"
         
-        formatted_text = []
-        
+        parts: List[str] = []
+
+        lifting = risk_data.get("lifting_ban")
+        if lifting and lifting.get("has_data"):
+            parts.append("=" * 80)
+            parts.append("【限售解禁数据】（来源：Tushare share_float）")
+            parts.append("=" * 80)
+            if lifting.get("summary"):
+                parts.append(lifting["summary"])
+            upcoming_records = [r for r in lifting.get("records", []) if r.get("category") == "upcoming"]
+            history_records = [r for r in lifting.get("records", []) if r.get("category") == "history"]
+
+            if upcoming_records:
+                parts.append("未来解禁安排：")
+                for rec in upcoming_records[:6]:
+                    parts.append(
+                        f"  - {rec.get('float_date')} | 股东 {rec.get('holder_name', '未知')} | "
+                        f"解禁股数 {self._format_number(rec.get('float_share'))}股 | 解禁比例 {self._format_percentage(rec.get('float_ratio'))}"
+                    )
+            if history_records:
+                parts.append("最近一年已完成解禁：")
+                for rec in history_records[-6:]:
+                    parts.append(
+                        f"  - {rec.get('float_date')} | 股东 {rec.get('holder_name', '未知')} | "
+                        f"解禁股数 {self._format_number(rec.get('float_share'))}股 | 解禁比例 {self._format_percentage(rec.get('float_ratio'))}"
+                    )
+            parts.append("")
+
+        reduction = risk_data.get("shareholder_reduction")
+        if reduction and reduction.get("has_data"):
+            parts.append("=" * 80)
+            parts.append("【股东增减持数据】（来源：Tushare stk_holdertrade）")
+            parts.append("=" * 80)
+            if reduction.get("summary"):
+                parts.append(reduction["summary"])
+            for rec in reduction.get("records", [])[:8]:
+                parts.append(
+                    f"  * {rec.get('ann_date')} | {rec.get('holder_name', '未知')} | {rec.get('trade_type', '变动')} | "
+                    f"变动股数 {self._format_number(rec.get('change_vol'))}股 | 变动比例 {self._format_percentage(rec.get('change_ratio'))}"
+                )
+            parts.append("")
+
+        events = risk_data.get("important_events")
+        if events and events.get("has_data"):
+            parts.append("=" * 80)
+            parts.append("【近期重要公告】（来源：Tushare anns）")
+            parts.append("=" * 80)
+            if events.get("summary"):
+                parts.append(events["summary"])
+            for rec in events.get("records", [])[:10]:
+                parts.append(
+                    f"  * {rec.get('ann_date')} | {rec.get('ann_type', '公告')} | {rec.get('title', '')}\n"
+                    f"    摘要: {(rec.get('summary') or '无')[:120]}"
+                )
+            parts.append("")
+
+        liquidity = risk_data.get("liquidity_metrics")
+        if liquidity and liquidity.get("has_data"):
+            parts.append("=" * 80)
+            parts.append("【流动性监控】（来源：Tushare daily/daily_basic）")
+            parts.append("=" * 80)
+            if liquidity.get("summary"):
+                parts.append(liquidity["summary"])
+            for rec in liquidity.get("records", [])[:5]:
+                parts.append(
+                    f"  * {rec.get('trade_date')} | 换手率 {self._format_percentage(rec.get('turnover_rate'))}"
+                    f" | 成交量 {self._format_number(rec.get('volume'))}股 | 成交额 {self._format_number(rec.get('amount'))}元"
+                    + (f" | 量比 {rec.get('volume_ratio'):.2f}" if rec.get('volume_ratio') is not None else "")
+                )
+            parts.append("")
+
+        return "\n".join(parts) if parts else "暂无风险数据"
+
+    # ------------------------------------------------------------------
+    # 辅助工具
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _safe_float(value, scale: Optional[float] = None) -> Optional[float]:
         try:
-            # 1. 限售解禁数据
-            lifting_ban = risk_data.get('lifting_ban')
-            if lifting_ban and lifting_ban.get('has_data') and lifting_ban.get('data') is not None:
-                formatted_text.append("=" * 80)
-                formatted_text.append("【限售解禁数据】")
-                formatted_text.append("=" * 80)
-                formatted_text.append(f"查询语句: {lifting_ban.get('query', '')}")
-                formatted_text.append("")
-                
-                # 直接将DataFrame转换为字符串（最多50行）
-                df = lifting_ban.get('data')
-                try:
-                    df_str = df.head(50).to_string(index=False, max_rows=50, max_cols=20)
-                    formatted_text.append(f"共 {len(df)} 条记录，显示前50条：")
-                    formatted_text.append(df_str)
-                except Exception as e:
-                    formatted_text.append(f"数据转换失败: {str(e)}")
-                formatted_text.append("")
-        
-            # 2. 大股东减持数据
-            reduction = risk_data.get('shareholder_reduction')
-            if reduction and reduction.get('has_data') and reduction.get('data') is not None:
-                formatted_text.append("=" * 80)
-                formatted_text.append("【大股东减持数据】")
-                formatted_text.append("=" * 80)
-                formatted_text.append(f"查询语句: {reduction.get('query', '')}")
-                formatted_text.append("")
-                
-                # 直接将DataFrame转换为字符串（最多50行）
-                df = reduction.get('data')
-                try:
-                    df_str = df.head(50).to_string(index=False, max_rows=50, max_cols=20)
-                    formatted_text.append(f"共 {len(df)} 条记录，显示前50条：")
-                    formatted_text.append(df_str)
-                except Exception as e:
-                    formatted_text.append(f"数据转换失败: {str(e)}")
-                formatted_text.append("")
-        
-            # 3. 重要事件数据
-            events = risk_data.get('important_events')
-            if events and events.get('has_data') and events.get('data') is not None:
-                formatted_text.append("=" * 80)
-                formatted_text.append("【重要事件数据】")
-                formatted_text.append("=" * 80)
-                formatted_text.append(f"查询语句: {events.get('query', '')}")
-                formatted_text.append("")
-                
-                # 直接将DataFrame转换为字符串（最多50行）
-                df = events.get('data')
-                try:
-                    df_str = df.head(50).to_string(index=False, max_rows=50, max_cols=20)
-                    formatted_text.append(f"共 {len(df)} 条记录，显示前50条：")
-                    formatted_text.append(df_str)
-                except Exception as e:
-                    formatted_text.append(f"数据转换失败: {str(e)}")
-                formatted_text.append("")
-            
-            return "\n".join(formatted_text) if formatted_text else "暂无风险数据"
-            
-        except Exception as e:
-            print(f"格式化风险数据时出错: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return f"格式化风险数据时出错: {str(e)}"
-    
-    def _format_dataframe_for_ai(self, df: pd.DataFrame, data_type: str) -> str:
-        """将DataFrame格式化为AI易读的文本格式"""
-        lines = []
-        
-        # 显示数据总数
-        lines.append(f"共 {len(df)} 条{data_type}记录")
-        lines.append("")
-        
-        # 显示列名
-        lines.append(f"数据字段：{', '.join(df.columns.tolist())}")
-        lines.append("")
-        
-        # 逐行显示数据（最多显示50条，避免数据过大）
-        max_rows = min(50, len(df))
-        
-        for idx, row in df.head(max_rows).iterrows():
-            lines.append(f"【记录 {idx + 1}】")
-            
-            # 显示每个字段的值
-            for col in df.columns:
-                value = row[col]
-                
-                # 处理不同类型的值
-                if pd.isna(value):
-                    value_str = "无数据"
-                elif isinstance(value, (int, float)):
-                    value_str = str(value)
-                else:
-                    value_str = str(value)
-                    # 限制过长的字符串
-                    if len(value_str) > 200:
-                        value_str = value_str[:200] + "..."
-                
-                lines.append(f"  {col}: {value_str}")
-            
-            lines.append("")
-        
-        if len(df) > max_rows:
-            lines.append(f"... 还有 {len(df) - max_rows} 条记录（已省略）")
-            lines.append("")
-        
-        return "\n".join(lines)
+            if value is None or pd.isna(value):
+                return None
+            value = float(value)
+            if scale:
+                value *= scale
+            return value
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _fmt_date(value) -> Optional[str]:
+        if value is None or pd.isna(value):
+            return None
+        value = str(value)
+        if len(value) == 8 and value.isdigit():
+            return f"{value[:4]}-{value[4:6]}-{value[6:]}"
+        return value
+
+    @staticmethod
+    def _format_number(value) -> str:
+        if value is None:
+            return "N/A"
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if abs(value) >= 1e12:
+            return f"{value / 1e12:.2f}万亿"
+        if abs(value) >= 1e8:
+            return f"{value / 1e8:.2f}亿"
+        return f"{value:,.0f}"
+
+    @staticmethod
+    def _format_percentage(value) -> str:
+        if value is None:
+            return "N/A"
+        try:
+            value = float(value)
+            return f"{value:.2f}%"
+        except (TypeError, ValueError):
+            return str(value)
 
 
-# 测试代码
 if __name__ == "__main__":
     fetcher = RiskDataFetcher()
-    
-    # 测试获取风险数据
     test_symbol = "600000"
-    print(f"测试获取 {test_symbol} 的风险数据...")
-    
-    risk_data = fetcher.get_risk_data(test_symbol)
-    
-    print("\n" + "=" * 60)
-    print("获取结果:")
-    print("=" * 60)
-    print(f"数据获取成功: {risk_data['data_success']}")
-    
-    if risk_data['data_success']:
-        print("\n格式化的风险数据:")
-        print(fetcher.format_risk_data_for_ai(risk_data))
+    data = fetcher.get_risk_data(test_symbol)
+    print("data_success:", data.get("data_success"))
+    if data.get("data_success"):
+        print(fetcher.format_risk_data_for_ai(data))
 

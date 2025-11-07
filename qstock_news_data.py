@@ -40,12 +40,13 @@ class QStockNewsDataFetcher:
         self.available = True
         print("✓ 新闻数据获取器初始化成功（akshare数据源）")
     
-    def get_stock_news(self, symbol):
+    def get_stock_news(self, symbol, analysis_date=None):
         """
         获取股票的新闻数据
         
         Args:
             symbol: 股票代码（6位数字）
+            analysis_date: 分析时间点（可选），格式：'YYYYMMDD'
             
         Returns:
             dict: 包含新闻数据的字典

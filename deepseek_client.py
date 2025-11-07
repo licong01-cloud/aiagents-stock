@@ -244,6 +244,8 @@ class DeepSeekClient:
         
         # 构建资金流向数据部分 - 使用akshare格式化数据
         fund_flow_section = ""
+        margin_history = fund_flow_data.get('margin_trading_history') if fund_flow_data else None
+
         if fund_flow_data and fund_flow_data.get('data_success'):
             # 使用格式化的资金流向数据
             from fund_flow_akshare import FundFlowAkshareDataFetcher
@@ -253,10 +255,46 @@ class DeepSeekClient:
 【近20个交易日资金流向详细数据】
 {fetcher.format_fund_flow_for_ai(fund_flow_data)}
 
-以上是通过akshare从东方财富获取的实际资金流向数据，请重点基于这些数据进行趋势分析。
+以上数据均由统一数据访问模块预先获取（Tushare优先，Akshare备用），请重点基于这些数据进行趋势分析。
 """
         else:
             fund_flow_section = "\n【资金流向数据】\n注意：未能获取到资金流向数据，将基于成交量进行分析。\n"
+
+        margin_section = ""
+        if margin_history and margin_history.get('records'):
+            def fmt_num(value):
+                if value is None:
+                    return "N/A"
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    return str(value)
+                if abs(value) >= 1e12:
+                    return f"{value / 1e12:.2f}万亿"
+                if abs(value) >= 1e8:
+                    return f"{value / 1e8:.2f}亿"
+                return f"{value:,.2f}"
+
+            def fmt_record(rec):
+                return (
+                    f"  * {rec.get('trade_date', 'N/A')} | "
+                    f"融资余额 {fmt_num(rec.get('margin_balance'))}元 | 净融资买入 {fmt_num(rec.get('net_margin_buy'))}元 | "
+                    f"融券余额 {fmt_num(rec.get('short_balance'))}元 | 净融券卖出 {fmt_num(rec.get('net_short_sell'))}元"
+                )
+
+            margin_section = f"""
+
+【近5个交易日融资融券数据】（来源：{margin_history.get('source', 'tushare')}，统一数据访问模块）
+- 观察区间：{margin_history.get('first_date', 'N/A')} ~ {margin_history.get('last_date', 'N/A')}
+- 融资余额变化：{fmt_num(margin_history.get('margin_balance_change'))}元
+- 融券余额变化：{fmt_num(margin_history.get('short_balance_change'))}元
+- 净融资买入合计：{fmt_num(margin_history.get('net_margin_buy_total'))}元
+- 净融券卖出合计：{fmt_num(margin_history.get('net_short_sell_total'))}元
+近5日明细：
+{chr(10).join(fmt_record(rec) for rec in margin_history.get('records', []))}
+"""
+        else:
+            margin_section = "\n【融资融券历史】\n注意：未能获取融资融券历史数据，将以资金流向数据为主。\n"
         
         prompt = f"""
 你是一名资深的资金面分析师，擅长从资金流向数据中洞察主力行为和市场趋势。
@@ -271,10 +309,11 @@ class DeepSeekClient:
 - 量比：{indicators.get('volume_ratio', 'N/A')}
 - 当前成交量与5日均量比：{indicators.get('volume_ratio', 'N/A')}
 {fund_flow_section}
+{margin_section}
 
 【分析要求】
 
-请你**基于上述近20个交易日的完整资金流向数据**，从以下角度进行深入分析：
+请你**基于上述近20个交易日的资金流向数据，以及近5个交易日的融资融券数据**，从以下角度进行深入分析：
 
 1. **资金流向趋势分析** ⭐ 重点
    - 分析近20个交易日主力资金的累计净流入/净流出
@@ -300,14 +339,37 @@ class DeepSeekClient:
      * 同向流动 → 趋势明确
    - 散户参与度和情绪判断
 
-4. **量价配合分析**
+2. **融资融券动向分析** ⭐ 重点
+   - 近5个交易日融资余额、融券余额、净融资买入和净融券卖出变化
+   - 判断融资资金是持续加仓还是减仓，融券是否增加压制
+   - 结合资金流向数据，分析多空力量变化及未来可能走势
+
+3. **主力资金行为分析** ⭐ 核心重点
+   - **主力资金总体表现**：累计净流入金额、占比、趋势方向
+   - **超大单分析**：机构大资金的进出动作
+   - **大单分析**：主力资金的操作特征
+   - **主力操作意图研判**：
+     * 吸筹建仓：持续净流入 + 股价上涨/盘整
+     * 派发出货：持续净流出 + 股价下跌/高位
+     * 洗盘整理：震荡流入流出 + 股价调整
+     * 拉升推动：集中大额流入 + 股价快速上涨
+
+4. **散户资金行为分析**
+   - **中单、小单的动向**：散户的买卖情绪
+   - **主力与散户博弈**：
+     * 主力流入、散户流出 → 专业资金吸筹
+     * 主力流出、散户流入 → 高位接盘风险
+     * 同向流动 → 趋势明确
+   - 散户参与度和情绪判断
+
+5. **量价配合分析**
    - 资金流向与股价涨跌的配合度
    - 识别量价背离：
      * 价涨量缩 + 资金流出 → 警惕顶部
      * 价跌量增 + 资金流入 → 可能见底
    - 成交活跃度变化趋势
 
-5. **关键信号识别**
+6. **关键信号识别**
    - **买入信号**：
      * 主力持续净流入
      * 大单明显流入
@@ -320,21 +382,17 @@ class DeepSeekClient:
      * 资金流向不明确
      * 主力与散户博弈激烈
 
-6. **阶段性特征**
+7. **阶段性特征**
    - 早期阶段（前10个交易日）vs 近期阶段（后10个交易日）
    - 资金流向的变化趋势
    - 转折点识别
-
-7. **投资建议**
-   - 基于资金流向的操作建议
-   - 关注重点和风险提示
-   - 资金面对后市的指示意义
-   - 未来资金流向预判
 
 8. **投资建议**
    - 基于资金面的明确操作建议
    - 买入/持有/卖出的判断依据
    - 仓位管理建议
+    - 关注重点和风险提示
+    - 资金面对后市的指示意义与预判
 
 【分析原则】
 - 主力资金持续流入 + 股价上涨 → 强势信号，主力看好
