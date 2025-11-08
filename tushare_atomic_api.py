@@ -837,6 +837,14 @@ class TushareAtomicClient:
         """
         return self.call("stk_surv", **params)
 
+    def stock_mx(self, **params) -> pd.DataFrame:
+        """动能因子数据
+        文档: https://tushare.pro/document/2?doc_id=300
+        参数: ts_code, trade_date, start_date, end_date
+        返回: mx_grade, com_stock, evd_v, zt_sum_z, wma250_z 等
+        """
+        return self.call("stock_mx", **params)
+
     def share_float(self, **params) -> pd.DataFrame:
         """限售股解禁/流通股本变动
         文档: https://tushare.pro/document/2?doc_id=108  (若具体 doc_id 以官方为准)
@@ -1507,6 +1515,18 @@ ENDPOINTS: Dict[str, EndpointMeta] = {
         description="机构调研数据",
         params={"ts_code": "TS代码", "trade_date": "调研日期", "start_date": "开始日期", "end_date": "结束日期", "fields": "字段列表"},
         returns={"surv_date": "调研日期", "fund_visitors": "调研人员", "rece_place": "接待地点", "rece_mode": "接待方式", "rece_org": "接待机构"}
+    ),
+    "stock_mx": EndpointMeta(
+        name="stock_mx", category=CATEGORY_STOCK, doc_url="https://tushare.pro/document/2?doc_id=300",
+        description="动能因子数据",
+        params={"ts_code": "股票代码", "trade_date": "交易日期", "start_date": "开始日期", "end_date": "结束日期"},
+        returns={
+            "mx_grade": "动能评级(1高/2中/3低/4弱)",
+            "com_stock": "行业轮动指标",
+            "evd_v": "速度指标，衡量股价变化速度",
+            "zt_sum_z": "极值指标，短期均线离差值",
+            "wma250_z": "偏离指标，中期均线偏离度"
+        }
     ),
     "ths_index": EndpointMeta(
         name="ths_index", category=CATEGORY_STOCK, doc_url="https://tushare.pro/document/2?doc_id=278",

@@ -5,6 +5,7 @@
 
 import os
 import pandas as pd
+import requests
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from network_optimizer import network_optimizer
@@ -20,6 +21,8 @@ class DataSourceManager:
         self.tushare_token = os.getenv('TUSHARE_TOKEN', '')
         self.tushare_available = False
         self.tushare_api = None
+        self.tdx_api_base = os.getenv('TDX_API_BASE', '').strip()
+        self.tdx_available = bool(self.tdx_api_base)
         
         # 初始化tushare
         if self.tushare_token:
@@ -34,6 +37,11 @@ class DataSourceManager:
                 self.tushare_available = False
         else:
             print("ℹ️ 未配置Tushare Token，将仅使用Akshare数据源")
+
+        if self.tdx_available:
+            print(f"✅ TDX API 数据源已启用 | Base URL = {self.tdx_api_base}")
+        else:
+            print("ℹ️ 未配置TDX API基础地址，将跳过TDX数据源")
     
     def get_stock_hist_data(self, symbol, start_date=None, end_date=None, adjust='qfq'):
         """
@@ -197,6 +205,92 @@ class DataSourceManager:
         
         return info
     
+    def _get_tdx_quote(self, symbol: str):
+        """
+        使用本地 TDX API 获取实时行情
+        """
+        if not self.tdx_available:
+            return None
+
+        try:
+            response = requests.get(
+                f"{self.tdx_api_base.rstrip('/')}/api/quote",
+                params={"code": symbol},
+                timeout=5
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as exc:
+            print(f"[TDX] ❌ 获取实时行情失败: {exc}")
+            return None
+
+        if not isinstance(payload, dict) or payload.get('code') != 0:
+            print(f"[TDX] ⚠️ 接口返回异常: {payload}")
+            return None
+
+        data_list = payload.get('data') or []
+        if not data_list:
+            print(f"[TDX] ⚠️ 未返回 {symbol} 的行情数据")
+            return None
+
+        quote = data_list[0]
+        kline = quote.get('K') or {}
+
+        def _scaled_value(source, key, scale=None):
+            value = source.get(key)
+            if value is None:
+                return None
+            try:
+                value = float(value)
+                if scale:
+                    value = value / scale
+                return value
+            except (TypeError, ValueError):
+                return None
+
+        close_price = _scaled_value(kline, 'Close', 1000)
+        last_price = _scaled_value(kline, 'Last', 1000)
+        high_price = _scaled_value(kline, 'High', 1000)
+        low_price = _scaled_value(kline, 'Low', 1000)
+        open_price = _scaled_value(kline, 'Open', 1000)
+
+        volume_raw = quote.get('TotalHand')
+        try:
+            volume = float(volume_raw) * 100 if volume_raw is not None else None
+        except (TypeError, ValueError):
+            volume = None
+
+        amount_raw = quote.get('Amount')
+        try:
+            amount = float(amount_raw) / 1000 if amount_raw is not None else None
+        except (TypeError, ValueError):
+            amount = None
+
+        change_percent = None
+        if close_price is not None and last_price not in (None, 0):
+            change_percent = (close_price - last_price) / last_price * 100
+
+        change_amount = None
+        if close_price is not None and last_price is not None:
+            change_amount = close_price - last_price
+
+        print(f"[TDX] ✅ 成功获取 {symbol} 实时行情")
+        return {
+            'symbol': symbol,
+            'name': quote.get('Name') or quote.get('Code') or quote.get('code'),
+            'price': close_price,
+            'change_percent': change_percent,
+            'change': change_amount,
+            'volume': volume,
+            'amount': amount,
+            'high': high_price,
+            'low': low_price,
+            'open': open_price,
+            'pre_close': last_price,
+            'timestamp': quote.get('ServerTime'),
+            'source': 'tdx'
+        }
+
     def get_realtime_quotes(self, symbol):
         """
         获取实时行情数据（优先tushare，失败时使用akshare）
@@ -207,8 +301,13 @@ class DataSourceManager:
         Returns:
             dict: 实时行情数据
         """
+        # 优先使用TDX API
+        tdx_result = self._get_tdx_quote(symbol)
+        if tdx_result:
+            return tdx_result
+
         quotes = {}
-        
+
         # 优先使用 tushare
         if self.tushare_available:
             try:

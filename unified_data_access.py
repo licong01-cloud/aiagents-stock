@@ -66,6 +66,14 @@ class UnifiedDataAccess:
         info.setdefault('beta', 'N/A')
         info.setdefault('52_week_high', 'N/A')
         info.setdefault('52_week_low', 'N/A')
+        info.setdefault('open_price', 'N/A')
+        info.setdefault('high_price', 'N/A')
+        info.setdefault('low_price', 'N/A')
+        info.setdefault('pre_close', 'N/A')
+        info.setdefault('volume', 'N/A')
+        info.setdefault('amount', 'N/A')
+        info.setdefault('quote_source', 'N/A')
+        info.setdefault('quote_timestamp', 'N/A')
         
         # 优先使用Tushare获取实时行情和估值数据
         if data_source_manager.tushare_available:
@@ -225,17 +233,44 @@ class UnifiedDataAccess:
             except Exception as e:
                 debug_logger.warning("Akshare获取详细信息失败", error=e, symbol=symbol)
         
-        # 如果还是没有当前价格，尝试从实时行情获取（仅实时模式）
-        if info['current_price'] == 'N/A' and not analysis_date:
+        # 实时模式下优先使用实时行情刷新价格/涨跌幅等字段
+        if not analysis_date:
             try:
                 debug_logger.debug("尝试从实时行情获取价格", symbol=symbol)
                 quotes = self.get_realtime_quotes(symbol)
                 if quotes and isinstance(quotes, dict):
-                    if quotes.get('price'):
-                        info['current_price'] = quotes['price']
-                    if quotes.get('change_percent'):
-                        info['change_percent'] = quotes['change_percent']
-                    debug_logger.debug("实时行情获取成功", symbol=symbol)
+                    price_val = quotes.get('price')
+                    if price_val is not None:
+                        info['current_price'] = round(float(price_val), 2)
+                    change_pct_val = quotes.get('change_percent')
+                    if change_pct_val is not None:
+                        info['change_percent'] = round(float(change_pct_val), 2)
+                    open_val = quotes.get('open')
+                    if open_val is not None:
+                        info['open_price'] = round(float(open_val), 2)
+                    high_val = quotes.get('high')
+                    if high_val is not None:
+                        info['high_price'] = round(float(high_val), 2)
+                    low_val = quotes.get('low')
+                    if low_val is not None:
+                        info['low_price'] = round(float(low_val), 2)
+                    pre_close_val = quotes.get('pre_close')
+                    if pre_close_val is not None:
+                        info['pre_close'] = round(float(pre_close_val), 2)
+                    volume_val = quotes.get('volume')
+                    if volume_val is not None:
+                        try:
+                            info['volume'] = int(volume_val)
+                        except (TypeError, ValueError):
+                            info['volume'] = volume_val
+                    amount_val = quotes.get('amount')
+                    if amount_val is not None:
+                        info['amount'] = round(float(amount_val), 2)
+                    if quotes.get('source'):
+                        info['quote_source'] = quotes['source']
+                    if quotes.get('timestamp'):
+                        info['quote_timestamp'] = quotes['timestamp']
+                    debug_logger.debug("实时行情获取成功", symbol=symbol, source=quotes.get('source'))
             except Exception as e:
                 debug_logger.debug("实时行情获取失败", error=e, symbol=symbol)
         
