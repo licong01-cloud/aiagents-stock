@@ -370,14 +370,6 @@ def main():
                 if key in st.session_state:
                     del st.session_state[key]
 
-        # 🌐 代理池管理
-        if st.button("🌐 代理池管理", width='stretch', key="nav_proxy_pool", help="网络优化与代理池管理"):
-            st.session_state.show_proxy_pool = True
-            for key in ['show_history', 'show_monitor', 'show_longhubang', 'show_portfolio',
-                       'show_config', 'show_main_force', 'show_sector_strategy', 'show_smart_monitor']:
-                if key in st.session_state:
-                    del st.session_state[key]
-
         # ⚙️ 环境配置
         if st.button("⚙️ 环境配置", width='stretch', key="nav_config", help="系统设置与API配置"):
             st.session_state.show_config = True
@@ -488,15 +480,6 @@ def main():
     if 'show_smart_monitor' in st.session_state and st.session_state.show_smart_monitor:
         smart_monitor_ui()
         return
-
-    # 检查是否显示代理池管理
-    if 'show_proxy_pool' in st.session_state and st.session_state.show_proxy_pool:
-        try:
-            from proxy_pool_ui import display_proxy_pool_manager
-            display_proxy_pool_manager()
-            return
-        except Exception as e:
-            st.error(f"加载代理池管理页面失败: {e}")
 
     # 检查是否显示持仓分析
     if 'show_portfolio' in st.session_state and st.session_state.show_portfolio:
@@ -1553,6 +1536,15 @@ def display_stock_info(stock_info, indicators):
     """显示股票基本信息"""
     st.subheader(f"📊 {stock_info.get('name', 'N/A')} ({stock_info.get('symbol', 'N/A')})")
 
+    # 显示分析时间与行情时间
+    analysis_ts = st.session_state.get('current_analysis_date')
+    if analysis_ts:
+        st.caption(f"📅 分析时间：{analysis_ts}")
+    quote_time = stock_info.get('quote_timestamp')
+    quote_source = stock_info.get('quote_source', 'N/A')
+    if quote_time or quote_source:
+        st.caption(f"⏱️ 行情时间：{quote_time or 'N/A'} （来源：{quote_source}）")
+
     # 基本信息卡片
     col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -2556,6 +2548,27 @@ def display_config_manager():
             st.info("ℹ️ 未设置Tushare Token，系统将使用其他数据源")
 
         st.info("💡 如何获取Tushare Token？\n\n1. 访问 https://tushare.pro\n2. 注册账号\n3. 进入个人中心\n4. 获取Token\n5. 复制并粘贴到上方输入框")
+
+        st.markdown("---")
+        st.markdown("### TDX本地数据源（可选）")
+        st.markdown("TDX本地数据源用于提供实时行情和K线数据。推荐在本地部署后配置访问地址。")
+
+        tdx_info = config_info["TDX_API_BASE"]
+        current_tdx = st.session_state.temp_config.get("TDX_API_BASE", "")
+
+        new_tdx = st.text_input(
+            f"🖥️ {tdx_info['description']}",
+            value=current_tdx,
+            placeholder="例如: http://localhost:8080",
+            help="若已在本地启动TDX API服务，请填写其访问地址",
+            key="input_tdx_api_base"
+        )
+        st.session_state.temp_config["TDX_API_BASE"] = new_tdx
+
+        if new_tdx:
+            st.success(f"✅ TDX本地数据源已设置: {new_tdx}")
+        else:
+            st.info("ℹ️ 未设置TDX数据源，系统将根据Tushare/Akshare获取数据")
 
         st.markdown("---")
         st.markdown("### 代理池与网络优化（仅当需要网络代理时配置）")

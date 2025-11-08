@@ -32,6 +32,12 @@ class ConfigManager:
                 "required": False,
                 "type": "password"
             },
+            "TDX_API_BASE": {
+                "value": "http://localhost:8080",
+                "description": "TDX本地数据源地址（可选）",
+                "required": False,
+                "type": "text"
+            },
             "MINIQMT_ENABLED": {
                 "value": "false",
                 "description": "启用MiniQMT量化交易",
@@ -227,6 +233,11 @@ class ConfigManager:
             # Tushare配置
             lines.append("# ========== Tushare数据接口（可选）==========")
             lines.append(f'TUSHARE_TOKEN="{config.get("TUSHARE_TOKEN", "")}"')
+            lines.append("")
+            
+            # TDX本地数据源配置
+            lines.append("# ========== TDX本地数据源（可选）==========")
+            lines.append(f'TDX_API_BASE="{config.get("TDX_API_BASE", "http://localhost:8080")}"')
             lines.append("")
             
             # MiniQMT配置

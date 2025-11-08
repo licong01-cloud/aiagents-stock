@@ -6,6 +6,7 @@
 import os
 import pandas as pd
 import requests
+from typing import Optional
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from network_optimizer import network_optimizer
@@ -45,7 +46,7 @@ class DataSourceManager:
     
     def get_stock_hist_data(self, symbol, start_date=None, end_date=None, adjust='qfq'):
         """
-        获取股票历史数据（优先tushare，失败时使用akshare）
+        获取股票历史数据（优先TDX，失败时使用tushare/akshare）
         
         Args:
             symbol: 股票代码（6位数字）
@@ -64,7 +65,24 @@ class DataSourceManager:
         else:
             end_date = datetime.now().strftime('%Y%m%d')
         
-        # 优先使用 Tushare
+        # 1. 优先使用本地 TDX API
+        if self.tdx_available:
+            try:
+                df = self._fetch_tdx_kline(
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    kline_type='day'
+                )
+                if df is not None and not df.empty:
+                    print(f"[TDX] ✅ 成功获取 {symbol} 的历史数据 (共{len(df)}条)")
+                    return df
+                else:
+                    print(f"[TDX] ⚠️ 未获取到 {symbol} 的历史数据，尝试其他数据源")
+            except Exception as e:
+                print(f"[TDX] ❌ 获取历史数据失败: {e}")
+        
+        # 2. 其次使用 Tushare
         if self.tushare_available:
             try:
                 with network_optimizer.apply():
@@ -78,17 +96,15 @@ class DataSourceManager:
                         end_date=end_date,
                         adj=adj
                     )
-                # 检查返回类型
                 if df is None:
                     print(f"[Tushare] ⚠️ 返回None")
                 elif isinstance(df, dict):
                     print(f"[Tushare] ⚠️ 返回dict而非DataFrame: {list(df.keys())[:5]}")
-                    df = None  # 将dict视为无效数据
                 elif isinstance(df, pd.DataFrame):
                     if not df.empty:
                         df = df.rename(columns={'trade_date': 'date', 'vol': 'volume', 'amount': 'amount'})
                         df['date'] = pd.to_datetime(df['date'])
-                        df = df.sort_values('date')
+                        df = df.sort_values('date').reset_index(drop=True)
                         df['volume'] = df['volume'] * 100
                         df['amount'] = df['amount'] * 1000
                         print(f"[Tushare] ✅ 成功获取 {len(df)} 条数据")
@@ -97,13 +113,12 @@ class DataSourceManager:
                         print(f"[Tushare] ⚠️ DataFrame为空")
                 else:
                     print(f"[Tushare] ⚠️ 返回类型错误: {type(df).__name__}")
-                    df = None
             except Exception as e:
                 print(f"[Tushare] ❌ 获取失败: {e}")
                 import traceback
                 traceback.print_exc()
 
-        # 失败再使用 Akshare 兜底
+        # 3. 最后使用 Akshare 兜底
         try:
             with network_optimizer.apply():
                 import akshare as ak
@@ -115,31 +130,136 @@ class DataSourceManager:
                     end_date=end_date,
                     adjust=adjust
                 )
-                # 检查返回类型
                 if df is None:
                     print(f"[Akshare] ⚠️ 返回None")
                 elif isinstance(df, dict):
                     print(f"[Akshare] ⚠️ 返回dict而非DataFrame: {list(df.keys())[:5]}")
-                    df = None  # 将dict视为无效数据
                 elif isinstance(df, pd.DataFrame):
                     if not df.empty:
                         df = df.rename(columns={'日期':'date','开盘':'open','收盘':'close','最高':'high','最低':'low','成交量':'volume','成交额':'amount','振幅':'amplitude','涨跌幅':'pct_change','涨跌额':'change','换手率':'turnover'})
                         df['date'] = pd.to_datetime(df['date'])
+                        df = df.sort_values('date').reset_index(drop=True)
                         print(f"[Akshare] ✅ 成功获取 {len(df)} 条数据")
                         return df
                     else:
                         print(f"[Akshare] ⚠️ DataFrame为空")
                 else:
                     print(f"[Akshare] ⚠️ 返回类型错误: {type(df).__name__}")
-                    df = None
         except Exception as e:
             print(f"[Akshare] ❌ 获取失败: {e}")
             import traceback
             traceback.print_exc()
         
-        # 两个数据源都失败
         print("❌ 所有数据源均获取失败")
         return None
+    
+    def _fetch_tdx_kline(self, symbol: str, start_date: Optional[str], end_date: Optional[str], kline_type: str = 'day'):
+        """
+        通过本地TDX API获取历史K线数据
+        """
+        if not self.tdx_available:
+            return None
+        
+        params = {
+            "code": symbol,
+            "type": kline_type or "day"
+        }
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        
+        try:
+            resp = requests.get(
+                f"{self.tdx_api_base.rstrip('/')}/api/kline-history",
+                params=params,
+                timeout=8
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception as exc:
+            print(f"[TDX] ❌ HTTP请求失败: {exc}")
+            return None
+        
+        if not isinstance(payload, dict) or payload.get("code") != 0:
+            print(f"[TDX] ⚠️ 接口返回异常: {payload}")
+            return None
+        
+        raw_data = payload.get("data")
+        if isinstance(raw_data, dict):
+            records = raw_data.get("List") or raw_data.get("list") or raw_data.get("data")
+        else:
+            records = raw_data
+        
+        if not records:
+            print(f"[TDX] ⚠️ 返回数据为空")
+            return None
+        
+        rows = []
+        for item in records:
+            if not isinstance(item, dict):
+                continue
+            
+            date_val = (
+                item.get("Date") or
+                item.get("date") or
+                item.get("Time") or
+                item.get("time")
+            )
+            if date_val is None:
+                continue
+            date_str = str(date_val)
+            date_str = date_str.replace('-', '').replace('/', '')
+            if len(date_str) >= 8:
+                date_str = date_str[:8]
+            
+            def _price(key: str):
+                val = item.get(key)
+                if val is None:
+                    return None
+                try:
+                    val = float(val)
+                    return val / 1000  # 历史K线价格单位：厘 -> 元
+                except (TypeError, ValueError):
+                    return None
+            
+            def _volume(key: str):
+                val = item.get(key)
+                if val is None:
+                    return None
+                try:
+                    val = float(val)
+                    return val * 100  # 成交量单位：手 -> 股
+                except (TypeError, ValueError):
+                    return None
+            
+            def _amount(key: str):
+                val = item.get(key)
+                if val is None:
+                    return None
+                try:
+                    val = float(val)
+                    return val / 1000  # 成交额单位：厘 -> 元
+                except (TypeError, ValueError):
+                    return None
+            
+            rows.append({
+                "date": date_str,
+                "open": _price("Open"),
+                "high": _price("High"),
+                "low": _price("Low"),
+                "close": _price("Close"),
+                "volume": _volume("Volume"),
+                "amount": _amount("Amount")
+            })
+        
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return None
+        
+        df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
+        df = df.sort_values("date").reset_index(drop=True)
+        return df
     
     def get_stock_basic_info(self, symbol):
         """
