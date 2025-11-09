@@ -450,7 +450,9 @@ class DataSourceManager:
                         'high': row['high'],
                         'low': row['low'],
                         'open': row['open'],
-                        'pre_close': row['pre_close']
+                        'pre_close': row['pre_close'],
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'source': 'tushare'
                     }
                     print(f"[Tushare] ✅ 成功获取实时行情")
                     return quotes
@@ -477,7 +479,9 @@ class DataSourceManager:
                     'high': row['最高'],
                     'low': row['最低'],
                     'open': row['今开'],
-                    'pre_close': row['昨收']
+                    'pre_close': row['昨收'],
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'source': 'akshare'
                 }
                 print(f"[Akshare] ✅ 成功获取实时行情")
                 return quotes
