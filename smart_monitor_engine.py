@@ -12,7 +12,7 @@ import threading
 from smart_monitor_deepseek import SmartMonitorDeepSeek
 from smart_monitor_data import SmartMonitorDataFetcher
 from smart_monitor_qmt import SmartMonitorQMT, SmartMonitorQMTSimulator
-from smart_monitor_db import SmartMonitorDB
+from pg_smart_monitor_repo import SmartMonitorDB
 from notification_service import notification_service  # 复用主程序的通知服务
 from config_manager import config_manager  # 复用主程序的配置管理器
 
