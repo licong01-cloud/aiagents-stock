@@ -2,7 +2,7 @@
 
 ## 🎯 概述
 
-已为您打包完成所有功能的API接口！包括：
+已为您打包完成所有功能的API接口！所有基础与扩展功能已默认集成，包括：
 
 ### ✅ 已实现的基础接口（6个）
 1. **GET /api/quote** - 五档行情
@@ -12,21 +12,45 @@
 5. **GET /api/search** - 搜索股票
 6. **GET /api/stock-info** - 综合信息
 
-### ✅ 扩展接口（6个）
+### ✅ 扩展接口（7个）
 7. **GET /api/codes** - 股票代码列表
 8. **POST /api/batch-quote** - 批量获取行情
 9. **GET /api/kline-history** - 历史K线范围查询
 10. **GET /api/index** - 指数数据
 11. **GET /api/market-stats** - 市场统计
-12. **GET /api/health** - 健康检查
+12. **GET /api/server-status** - 服务状态
+13. **GET /api/health** - 健康检查
+
+### ✅ 数据入库任务接口（5个）
+14. **POST /api/tasks/pull-kline** - 批量K线入库任务
+15. **POST /api/tasks/pull-trade** - 分时成交入库任务
+16. **GET /api/tasks** - 查询任务列表
+17. **GET /api/tasks/{id}** - 查询任务详情
+18. **POST /api/tasks/{id}/cancel** - 取消任务
+
+### ✅ 新增数据服务接口（12个）
+19. **GET /api/etf** - ETF基金列表
+20. **GET /api/trade-history** - 历史分时成交分页
+21. **GET /api/minute-trade-all** - 全天分时成交汇总
+22. **GET /api/workday** - 交易日信息查询
+23. **GET /api/market-count** - 各交易所证券数量
+24. **GET /api/stock-codes** - 全部股票代码
+25. **GET /api/etf-codes** - 全部ETF代码
+26. **GET /api/kline-all** - 股票历史K线全集
+27. **GET /api/index/all** - 指数历史K线全集
+28. **GET /api/trade-history/full** - 上市以来分时成交
+29. **GET /api/workday/range** - 交易日范围列表
+30. **GET /api/income** - 收益区间分析
 
 ---
 
 ## 🚀 如何集成扩展接口
 
+> 当前仓库已经完成以下步骤，接口可直接使用；若需要迁移到其他工程或自定义修改，可参考下述说明。
+
 ### 方法一：合并到现有server.go（推荐）
 
-在 `web/server.go` 的 `main()` 函数中添加新路由：
+在 `web/server.go` 的 `main()` 函数中注册路由：
 
 ```go
 func main() {
@@ -41,14 +65,32 @@ func main() {
 	http.HandleFunc("/api/search", handleSearchCode)
 	http.HandleFunc("/api/stock-info", handleGetStockInfo)
 
-	// === 新增扩展API路由 ===
+	// === 扩展API路由 ===
 	http.HandleFunc("/api/codes", handleGetCodes)
 	http.HandleFunc("/api/batch-quote", handleBatchQuote)
 	http.HandleFunc("/api/kline-history", handleGetKlineHistory)
 	http.HandleFunc("/api/index", handleGetIndex)
+	http.HandleFunc("/api/index/all", handleGetIndexAll)
 	http.HandleFunc("/api/market-stats", handleGetMarketStats)
-	http.HandleFunc("/api/status", handleGetServerStatus)
+	http.HandleFunc("/api/market-count", handleGetMarketCount)
+	http.HandleFunc("/api/stock-codes", handleGetStockCodes)
+	http.HandleFunc("/api/etf-codes", handleGetETFCodes)
+	http.HandleFunc("/api/server-status", handleGetServerStatus)
 	http.HandleFunc("/api/health", handleHealthCheck)
+	http.HandleFunc("/api/etf", handleGetETFList)
+	http.HandleFunc("/api/trade-history", handleGetTradeHistory)
+	http.HandleFunc("/api/trade-history/full", handleGetTradeHistoryFull)
+	http.HandleFunc("/api/minute-trade-all", handleGetMinuteTradeAll)
+	http.HandleFunc("/api/kline-all", handleGetKlineAll)
+	http.HandleFunc("/api/workday", handleGetWorkday)
+	http.HandleFunc("/api/workday/range", handleGetWorkdayRange)
+	http.HandleFunc("/api/income", handleGetIncome)
+
+	// === 任务调度路由 ===
+	http.HandleFunc("/api/tasks/pull-kline", handleCreatePullKlineTask)
+	http.HandleFunc("/api/tasks/pull-trade", handleCreatePullTradeTask)
+	http.HandleFunc("/api/tasks", handleListTasks)
+	http.HandleFunc("/api/tasks/", handleTaskOperations)
 
 	port := ":8080"
 	log.Printf("服务启动成功，访问 http://localhost%s\n", port)
@@ -58,7 +100,7 @@ func main() {
 
 ### 方法二：复制扩展函数到server.go
 
-将 `server_api_extended.go` 中的所有函数复制到 `server.go` 文件末尾，然后添加路由。
+需要在其他项目使用时，可将 `server_api_extended.go` 中的函数与工具方法复制到目标项目，并同步注册路由。
 
 ---
 
@@ -66,7 +108,7 @@ func main() {
 
 ### 步骤1: 添加扩展接口代码
 
-打开 `web/server.go`，在文件末尾添加以下代码：
+（示例代码已合并在仓库中，以下片段仅作参考）
 
 ```go
 // ==================== 扩展API接口 ====================
@@ -199,24 +241,7 @@ import (
 )
 ```
 
-### 步骤3: 注册新路由
-
-在 `main()` 函数中添加：
-
-```go
-func main() {
-	// ... 现有代码 ...
-	
-	// 扩展API路由
-	http.HandleFunc("/api/codes", handleGetCodes)
-	http.HandleFunc("/api/batch-quote", handleBatchQuote)
-	http.HandleFunc("/api/health", handleHealthCheck)
-	
-	// ... 启动服务器代码 ...
-}
-```
-
-### 步骤4: 重新构建部署
+### 步骤3: 重新构建部署（如有修改）
 
 ```bash
 # 停止服务
@@ -293,18 +318,11 @@ curl -X POST http://localhost:8080/api/batch-quote \
 }
 ```
 
-### 测试3: 健康检查
+### 测试3: 健康与服务状态
 
 ```bash
+curl "http://localhost:8080/api/server-status"
 curl "http://localhost:8080/api/health"
-```
-
-预期响应：
-```json
-{
-  "status": "healthy",
-  "time": 1730617200
-}
 ```
 
 ---
@@ -313,26 +331,26 @@ curl "http://localhost:8080/api/health"
 
 ### 基础数据接口
 
-| 接口 | 方法 | 说明 | 状态 |
-|-----|------|------|------|
-| /api/quote | GET | 五档行情 | ✅ 已实现 |
-| /api/kline | GET | K线数据 | ✅ 已实现 |
-| /api/minute | GET | 分时数据 | ✅ 已实现 |
-| /api/trade | GET | 分时成交 | ✅ 已实现 |
-| /api/search | GET | 搜索股票 | ✅ 已实现 |
-| /api/stock-info | GET | 综合信息 | ✅ 已实现 |
+| 接口 | 方法 | 说明 |
+|-----|------|------|
+| /api/quote | GET | 五档行情 |
+| /api/kline | GET | K线数据（含日/周/月前复权） |
+| /api/minute | GET | 分时数据（自动回退至最近交易日） |
+| /api/trade | GET | 分时成交 |
+| /api/search | GET | 搜索股票（支持代码/名称模糊匹配） |
+| /api/stock-info | GET | 综合信息汇总 |
 
 ### 扩展功能接口
 
-| 接口 | 方法 | 说明 | 状态 |
-|-----|------|------|------|
-| /api/codes | GET | 股票列表 | ✅ 已实现 |
-| /api/batch-quote | POST | 批量行情 | ✅ 已实现 |
-| /api/kline-history | GET | 历史K线 | ✅ 已实现 |
-| /api/index | GET | 指数数据 | ✅ 已实现 |
-| /api/market-stats | GET | 市场统计 | ✅ 已实现 |
-| /api/status | GET | 服务状态 | ✅ 已实现 |
-| /api/health | GET | 健康检查 | ✅ 已实现 |
+| 接口 | 方法 | 说明 |
+|-----|------|------|
+| /api/codes | GET | 股票列表 |
+| /api/batch-quote | POST | 批量行情 |
+| /api/kline-history | GET | 历史K线（limit ≤ 800） |
+| /api/index | GET | 指数数据 |
+| /api/market-stats | GET | 市场统计 |
+| /api/server-status | GET | 服务状态 |
+| /api/health | GET | 健康检查 |
 
 ### 静态文件
 
@@ -523,7 +541,7 @@ func setCache(key string, val interface{}) {
 ## ✅ 总结
 
 ### 已完成
-✅ 12个完整API接口  
+✅ 26个完整API接口  
 ✅ 详细的接口文档  
 ✅ 使用示例（Python/JavaScript/cURL）  
 ✅ 集成指南  

@@ -90,6 +90,24 @@
 - tick_trade → GET /api/trade?code&date=YYYYMMDD → tick_trade_raw
 - index_kline → GET /api/index?code=sh000001&type=day|week|month → index_kline_*_qfq
 - 可选镜像（默认关闭）：GET /api/kline?type=minute5|minute15|minute30|hour → 镜像表
+- 全量批量接口：
+  - GET /api/kline-all?code=XXX&type=day&limit=200 → 加速单支股票的历史补齐（初始化阶段）
+  - GET /api/index/all?code=sh000001&type=day&limit=200 → 指数历史补齐
+  - GET /api/trade-history/full?code=XXX&limit=300 → 逐笔成交全量拉取
+  - GET /api/workday/range?start=YYYYMMDD&end=YYYYMMDD → trading_calendar 批量写入
+
+### 5.1 批量与全量接口策略
+- **初始化阶段**：优先使用 `/api/kline-all`、`/api/index/all`、`/api/trade-history/full`、`/api/workday/range` 等批量接口，一次请求覆盖 200～300 条记录，显著减少往返次数。
+- **任务划分**：按照股票代码列表切分批次（默认 2000 条/批），每批触发一组批量请求；若批量接口返回 `data.list` 结构，统一落库前先解包。
+- **兼容性**：批量接口若返回空，回退至单日接口（如 `/api/kline`、`/api/trade`）确保完整性。
+- **超时策略**：批量接口使用独立的 bulk timeout（默认 30s，可配置，<=0 表示不设限），成功返回数据则视为用时可接受。
+- **断点续传**：`ingestion_state` 针对批量接口存储 `cursor_date/cursor_id`，遇到长列表时拆分多次调用，确保失败重试时继续剩余区间。
+
+### 5.2 每日增量与实时更新
+- **收盘后批处理**：使用 `/api/kline-history`、`/api/trade-history/full` 的 `before`/`limit` 游标参数补齐前一交易日数据；若接口提供批量历史（如 `/api/kline-all`），则传入较小 limit（如 50），在一个请求内补齐当日。
+- **分钟与逐笔实时补齐**：交易时段内按 1～5 分钟频率查询 `/api/minute`、`/api/trade` 的最新片段；收盘后统一使用批量全量接口做 reconcile，发现缺口则触发补偿任务。
+- **指数与市场概览**：实时更新 `/api/index`（或批量 `/api/index/all`），以及 `/api/market-count`、`/api/workday/range` 等元数据，保证 dashboard 与调度对齐。
+- **任务 API 集成**：结合 `/api/tasks/*` 触发长耗时批次，前端展示进度并根据 `task_id` 轮询状态；取消任务后可由 `ingestion_state` 保障续跑。
 
 ## 6. 后端 API 契约（管理作业）
 - POST `/api/db/config/test`：测试 DB 连接
@@ -101,6 +119,13 @@
 - POST `/api/ingestion/cancel`：取消作业
 - POST `/api/ingestion/retry`：对失败清单或整体重试
 - GET `/api/ingestion/logs?job_id=...`：查询日志
+- POST `/api/ingestion/schedule`：创建/更新调度任务
+- GET `/api/ingestion/schedule`：查询调度配置列表（含启用状态、频率、任务类型）
+- POST `/api/ingestion/schedule/{schedule_id}/toggle`：启用/停用调度任务
+- POST `/api/ingestion/schedule/{schedule_id}/run`：针对既有调度立即排队执行
+- GET `/api/ingestion/logs`：查询近期入库日志（结构化 JSON，有 run_id / level / payload）
+- POST `/api/testing/run`：触发数据源测试脚本执行（同步或异步）
+- POST `/api/testing/schedule` / GET `/api/testing/schedule` / toggle / run：管理测试脚本的定时执行与即时触发
 
 示例请求（启动 init）：
 ```json
@@ -116,14 +141,33 @@
 }
 ```
 
+### 5.3 后台调度服务
+
+- **核心组件**：
+  - `tdx_scheduler.py`：基于 `schedule` + `ThreadPoolExecutor` 的统一调度器，提供手动触发、定时任务、执行状态刷新、结构化日志写入。
+  - `tdx_backend.py`：FastAPI 服务，封装调度/执行 REST 接口；启动时自动拉起调度器并周期刷新数据库中的调度配置。
+- **状态存储**：
+  - `market.testing_schedules`：测试调度定义（frequency/options/last_run/next_run）。
+  - `market.testing_runs`：测试执行记录（run_id、status、summary/detail/log）。
+  - `market.ingestion_schedules`：入库调度定义（dataset/mode/frequency/options/last_run/next_run）。
+  - `market.ingestion_logs`：入库过程日志（JSON payload 含 run_id、summary、error、stdout/stderr）。
+- **Next Run 计算**：调度器每次载入或执行任务后会将下一次运行时间写回数据库，供前端直接展示。
+- **执行命令**：默认调用 `scripts/test_tdx_all_api.py`、`scripts/ingest_incremental.py`、`scripts/ingest_full_daily.py`、`scripts/ingest_full_minute.py`，可通过调度 options 覆盖脚本路径及 CLI 参数。
+
+> 运行方式：`uvicorn tdx_backend:app --host 0.0.0.0 --port 9000`，前端通过 `TDX_BACKEND_BASE` 环境变量访问该服务。
+
 ## 7. 幂等性、重试与断点续传
 - 所有写入 UPSERT；唯一/主键与幂等键保障重复写不产生脏数据
-- `ingestion_state(dataset, ts_code, last_success_date/time)` 驱动断点续传
+- `ingestion_state(dataset, ts_code, last_success_date/time, cursor_payload)` 驱动断点续传；批量接口存储最后一次成功的游标（日期或 ID 列表）
+- `ingestion_jobs` 记录任务配置（并发、批量大小、bulk timeout），失败后重试时读取相同配置，确保行为一致
 - 失败重试：指数退避 + 最大重试次数；UI 可选择失败清单重试
 
 ## 8. 性能与安全
 - 批量：优先 COPY，降级 `execute_values`（1k～10k/批），事务控制
-- 并发：默认 6；分钟/逐笔建议 3～6（按服务压力调整）
+- 并发：默认 6；分钟/逐笔建议 3～6（按服务压力调整）。批量接口结合 worker 池（单节点多进程或多线程），任务按 `exchange`、`code_range` 分片；若使用 celery/RQ 等队列，需在任务 payload 中包含游标以便重试。
+- 调度执行：
+  - **Worker 池**：统一使用任务调度器（如 APScheduler + Celery/RQ）；`testing` 与 `ingestion` 作业共享 worker 池但区分队列，以保障批量接口与测试脚本不互相阻塞。
+  - **资源隔离**：提供最大并发阈值、速率限制和 bulk timeout 配置，避免过度占用 TDX 服务。
 - API：超时 10s；非交易日回退上一交易日；错误记录与告警
 - 安全：DB 密码不回显；日志脱敏
 

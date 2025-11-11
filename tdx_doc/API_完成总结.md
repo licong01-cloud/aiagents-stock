@@ -8,8 +8,8 @@
 
 ### ✅ 核心文档（4个）
 
-1. **API_接口文档.md** (674行)
-   - 12个完整API接口说明
+1. **API_接口文档.md** (已更新至700+行)
+   - 覆盖行情、历史、任务调度等全量API说明
    - 请求/响应格式
    - 使用示例（Python/JavaScript/cURL）
    - 错误码说明
@@ -22,8 +22,8 @@
    - 性能优化
    - 使用场景
 
-3. **API_使用示例.py** (新建)
-   - 7个完整的Python使用示例
+3. **API_使用示例.py** (已扩展)
+   - 10个完整的Python使用示例
    - 可直接运行测试
    - 涵盖所有接口
    - 包含技术分析示例
@@ -48,16 +48,40 @@
 | 5 | /api/search | GET | 搜索股票 | ✅ 运行中 |
 | 6 | /api/stock-info | GET | 综合信息 | ✅ 运行中 |
 
-### 第二组：扩展功能接口（需集成）
+### 第二组：扩展功能接口（已集成）
 
 | # | 接口 | 方法 | 功能 | 状态 |
 |---|-----|------|------|------|
-| 7 | /api/codes | GET | 股票列表 | 📝 待集成 |
-| 8 | /api/batch-quote | POST | 批量行情 | 📝 待集成 |
-| 9 | /api/kline-history | GET | 历史K线 | 📝 待集成 |
-| 10 | /api/index | GET | 指数数据 | 📝 待集成 |
-| 11 | /api/market-stats | GET | 市场统计 | 📝 待集成 |
-| 12 | /api/health | GET | 健康检查 | 📝 待集成 |
+| 7 | /api/codes | GET | 股票列表 | ✅ 运行中 |
+| 8 | /api/batch-quote | POST | 批量行情 | ✅ 运行中 |
+| 9 | /api/kline-history | GET | 历史K线（limit≤800） | ✅ 运行中 |
+| 10 | /api/index | GET | 指数数据 | ✅ 运行中 |
+| 11 | /api/market-stats | GET | 市场统计 | ✅ 运行中 |
+| 12 | /api/server-status | GET | 服务状态 | ✅ 运行中 |
+| 13 | /api/health | GET | 健康检查 | ✅ 运行中 |
+
+### 第三组：数据入库与任务接口（新上线）
+
+| # | 接口 | 方法 | 功能 | 状态 |
+|---|-----|------|------|------|
+| 14 | /api/tasks/pull-kline | POST | 批量K线入库任务 | ✅ 运行中 |
+| 15 | /api/tasks/pull-trade | POST | 分时成交入库任务 | ✅ 运行中 |
+| 16 | /api/tasks | GET | 任务列表查询 | ✅ 运行中 |
+| 17 | /api/tasks/{id} | GET | 单任务状态查询 | ✅ 运行中 |
+| 18 | /api/tasks/{id}/cancel | POST | 取消任务 | ✅ 运行中 |
+
+### 第四组：高级数据服务接口
+
+| # | 接口 | 方法 | 功能 | 状态 |
+|---|-----|------|------|------|
+| 19 | /api/market-count | GET | 证券数量统计 | ✅ 运行中 |
+| 20 | /api/stock-codes | GET | 全部股票代码列表 | ✅ 运行中 |
+| 21 | /api/etf-codes | GET | 全部ETF代码列表 | ✅ 运行中 |
+| 22 | /api/kline-all | GET | 股票历史K线全集 | ✅ 运行中 |
+| 23 | /api/index/all | GET | 指数历史K线全集 | ✅ 运行中 |
+| 24 | /api/trade-history/full | GET | 上市以来分时成交 | ✅ 运行中 |
+| 25 | /api/workday/range | GET | 交易日范围查询 | ✅ 运行中 |
+| 26 | /api/income | GET | 收益率区间分析 | ✅ 运行中 |
 
 ---
 
@@ -119,34 +143,13 @@ curl "http://localhost:8080/api/search?keyword=平安"
 
 ---
 
-## 📝 如何添加扩展接口
+## 📝 如何在其他项目复用扩展接口
 
-### 快速集成（3步）
+当前仓库已集成所有扩展API；若需要迁移到其他工程，可参考：
 
-#### 步骤1: 复制代码
-
-将 `web/server_api_extended.go` 中的函数复制到 `web/server.go` 末尾
-
-#### 步骤2: 添加路由
-
-在 `main()` 函数中添加：
-
-```go
-// 扩展API
-http.HandleFunc("/api/codes", handleGetCodes)
-http.HandleFunc("/api/batch-quote", handleBatchQuote)
-http.HandleFunc("/api/health", handleHealthCheck)
-```
-
-#### 步骤3: 重新部署
-
-```bash
-docker-compose down
-docker-compose build
-docker-compose up -d
-```
-
-详细步骤见：`API_集成指南.md`
+1. **复制代码**：将 `web/server_api_extended.go` 中的函数与辅助方法拷贝到目标服务。  
+2. **注册路由**：在 `main()` 中添加 `/api/codes`、`/api/batch-quote`、`/api/kline-history`、`/api/index`、`/api/market-stats`、`/api/server-status`、`/api/health` 等路由。  
+3. **重建部署**：重新编译或重启服务。详细说明见 `API_集成指南.md`。
 
 ---
 
@@ -293,8 +296,8 @@ python API_使用示例.py
 ## 🎉 总结
 
 ### 已完成
-✅ **12个完整API接口**（6个运行中 + 6个待集成）  
-✅ **674行详细文档**  
+✅ **26个完整API接口**（全部已实现并上线）  
+✅ **900+行详细文档**  
 ✅ **Python/JavaScript/cURL示例**  
 ✅ **集成指南和最佳实践**  
 ✅ **可运行的示例程序**  
@@ -354,10 +357,10 @@ python API_使用示例.py
 **所有功能已成功打包为API接口，开始使用吧！** 🎉🚀📈
 
 **相关文件**：
-- 📄 API_接口文档.md（674行）
-- 📄 API_集成指南.md（新建）
-- 🐍 API_使用示例.py（新建）
-- 💻 web/server_api_extended.go（新建）
+- 📄 API_接口文档.md（已更新，含全部接口与最新说明）
+- 📄 API_集成指南.md（迁移/二次集成参考）
+- 🐍 API_使用示例.py（覆盖全部接口示例）
+- 💻 web/server.go / web/server_api_extended.go（核心服务实现）
 
 **现在就可以通过API接口访问所有股票数据功能！**
 

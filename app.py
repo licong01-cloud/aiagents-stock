@@ -18,6 +18,7 @@ from monitor_manager import display_monitor_manager, get_monitor_summary
 from monitor_service import monitor_service
 from notification_service import notification_service
 from config_manager import config_manager
+from tdx_ui import show_local_data_management
 from main_force_ui import display_main_force_selector
 from sector_strategy_ui import display_sector_strategy
 from longhubang_ui import display_longhubang
@@ -300,9 +301,11 @@ def main():
         if st.button("🏠 股票分析", width='stretch', key="nav_home", help="返回首页，进行单只股票的深度分析"):
             # 清除所有功能页面标志
             for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                       'show_sector_strategy', 'show_longhubang', 'show_portfolio']:
+                       'show_sector_strategy', 'show_longhubang', 'show_portfolio', 'show_local_data',
+                       'show_smart_monitor']:
                 if key in st.session_state:
                     del st.session_state[key]
+            st.rerun()
 
         st.markdown("---")
 
@@ -313,9 +316,10 @@ def main():
             if st.button("💰 主力选股", width='stretch', key="nav_main_force", help="基于主力资金流向的选股策略"):
                 st.session_state.show_main_force = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_sector_strategy',
-                           'show_longhubang', 'show_portfolio']:
+                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor']:
                     if key in st.session_state:
                         del st.session_state[key]
+                st.rerun()
 
         # 📊 策略分析
         with st.expander("📊 策略分析", expanded=True):
@@ -324,16 +328,18 @@ def main():
             if st.button("🎯 智策板块", width='stretch', key="nav_sector_strategy", help="AI板块策略分析"):
                 st.session_state.show_sector_strategy = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_longhubang', 'show_portfolio', 'show_smart_monitor']:
+                           'show_longhubang', 'show_portfolio', 'show_smart_monitor', 'show_local_data']:
                     if key in st.session_state:
                         del st.session_state[key]
+                st.rerun()
 
             if st.button("🐉 智瞰龙虎", width='stretch', key="nav_longhubang", help="龙虎榜深度分析"):
                 st.session_state.show_longhubang = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_sector_strategy', 'show_portfolio', 'show_smart_monitor']:
+                           'show_sector_strategy', 'show_portfolio', 'show_smart_monitor', 'show_local_data']:
                     if key in st.session_state:
                         del st.session_state[key]
+                st.rerun()
 
         # 💼 投资管理
         with st.expander("💼 投资管理", expanded=True):
@@ -342,23 +348,26 @@ def main():
             if st.button("📊 持仓分析", width='stretch', key="nav_portfolio", help="投资组合分析与定时跟踪"):
                 st.session_state.show_portfolio = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_sector_strategy', 'show_longhubang', 'show_smart_monitor']:
+                           'show_sector_strategy', 'show_longhubang', 'show_smart_monitor', 'show_local_data']:
                     if key in st.session_state:
                         del st.session_state[key]
+                st.rerun()
 
             if st.button("🤖 AI盯盘", width='stretch', key="nav_smart_monitor", help="DeepSeek AI自动盯盘决策交易（支持A股T+1）"):
                 st.session_state.show_smart_monitor = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_sector_strategy', 'show_longhubang', 'show_portfolio']:
+                           'show_sector_strategy', 'show_longhubang', 'show_portfolio', 'show_local_data']:
                     if key in st.session_state:
                         del st.session_state[key]
+                st.rerun()
 
             if st.button("📡 实时监测", width='stretch', key="nav_monitor", help="价格监控与预警提醒"):
                 st.session_state.show_monitor = True
                 for key in ['show_history', 'show_main_force', 'show_longhubang', 'show_portfolio',
-                           'show_config', 'show_sector_strategy', 'show_smart_monitor']:
+                           'show_config', 'show_sector_strategy', 'show_smart_monitor', 'show_local_data']:
                     if key in st.session_state:
                         del st.session_state[key]
+                st.rerun()
 
         st.markdown("---")
 
@@ -366,17 +375,27 @@ def main():
         if st.button("📖 历史记录", width='stretch', key="nav_history", help="查看历史分析记录"):
             st.session_state.show_history = True
             for key in ['show_monitor', 'show_longhubang', 'show_portfolio', 'show_config',
-                       'show_main_force', 'show_sector_strategy']:
+                       'show_main_force', 'show_sector_strategy', 'show_local_data', 'show_smart_monitor']:
                 if key in st.session_state:
                     del st.session_state[key]
+            st.rerun()
 
         # ⚙️ 环境配置
         if st.button("⚙️ 环境配置", width='stretch', key="nav_config", help="系统设置与API配置"):
             st.session_state.show_config = True
             for key in ['show_history', 'show_monitor', 'show_main_force', 'show_sector_strategy',
-                       'show_longhubang', 'show_portfolio']:
+                       'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor']:
                 if key in st.session_state:
                     del st.session_state[key]
+            st.rerun()
+
+        if st.button("🗄️ 本地数据管理", width='stretch', key="nav_local_data", help="管理TDX数据源及调度"):
+            st.session_state.show_local_data = True
+            for key in ['show_history', 'show_monitor', 'show_main_force', 'show_sector_strategy',
+                        'show_longhubang', 'show_portfolio', 'show_config', 'show_smart_monitor']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
 
         st.markdown("---")
 
@@ -485,6 +504,11 @@ def main():
     if 'show_portfolio' in st.session_state and st.session_state.show_portfolio:
         from portfolio_ui import display_portfolio_manager
         display_portfolio_manager()
+        return
+
+    # 检查是否显示本地数据管理
+    if 'show_local_data' in st.session_state and st.session_state.show_local_data:
+        show_local_data_management()
         return
 
     # 检查是否显示环境配置
@@ -2475,6 +2499,26 @@ def display_config_manager():
     # 获取当前配置
     config_info = config_manager.get_config_info()
 
+    def _persist_config():
+        """Validate and persist the current temp configuration to .env."""
+        is_valid, message = config_manager.validate_config(st.session_state.temp_config)
+        if not is_valid:
+            st.error(f"❌ 配置验证失败: {message}")
+            return
+
+        if config_manager.write_env(st.session_state.temp_config):
+            st.success("✅ 配置已保存到 .env 文件")
+            try:
+                config_manager.reload_config()
+                st.success("✅ 配置已重新加载")
+            except Exception as exc:  # noqa: BLE001
+                st.warning(f"⚠️ 配置重新加载失败: {exc}")
+            st.info("ℹ️ 请重启应用使配置生效")
+            time.sleep(1.5)
+            st.rerun()
+        else:
+            st.error("❌ 保存配置失败")
+
     # 创建标签页
     tab1, tab2, tab3, tab4 = st.tabs(["📝 基本配置", "📊 数据源配置", "🤖 量化交易配置", "📢 通知配置"])
 
@@ -2569,6 +2613,77 @@ def display_config_manager():
             st.success(f"✅ TDX本地数据源已设置: {new_tdx}")
         else:
             st.info("ℹ️ 未设置TDX数据源，系统将根据Tushare/Akshare获取数据")
+
+        backend_info = config_info["TDX_BACKEND_BASE"]
+        current_backend = st.session_state.temp_config.get("TDX_BACKEND_BASE", "")
+
+        new_backend = st.text_input(
+            f"🛠️ {backend_info['description']}",
+            value=current_backend,
+            placeholder="例如: http://localhost:8080",
+            help="调度后端 FastAPI 服务地址，用于测试与入库调度管理",
+            key="input_tdx_backend_base"
+        )
+        st.session_state.temp_config["TDX_BACKEND_BASE"] = new_backend
+
+        if new_backend:
+            st.success(f"✅ 调度后端服务地址已设置: {new_backend}")
+        else:
+            st.info("ℹ️ 未设置调度后端地址，将使用默认 http://localhost:8080")
+
+        st.markdown("---")
+        st.markdown("### TimescaleDB 数据库（TDX 调度与入库）")
+
+        col_db1, col_db2 = st.columns(2)
+        with col_db1:
+            db_host_info = config_info["TDX_DB_HOST"]
+            db_host = st.text_input(
+                f"🏠 {db_host_info['description']}",
+                value=st.session_state.temp_config.get("TDX_DB_HOST", ""),
+                key="input_tdx_db_host"
+            )
+            st.session_state.temp_config["TDX_DB_HOST"] = db_host
+
+            db_name_info = config_info["TDX_DB_NAME"]
+            db_name = st.text_input(
+                f"🗃️ {db_name_info['description']}",
+                value=st.session_state.temp_config.get("TDX_DB_NAME", ""),
+                key="input_tdx_db_name"
+            )
+            st.session_state.temp_config["TDX_DB_NAME"] = db_name
+
+        with col_db2:
+            db_port_info = config_info["TDX_DB_PORT"]
+            db_port = st.text_input(
+                f"🔌 {db_port_info['description']}",
+                value=st.session_state.temp_config.get("TDX_DB_PORT", ""),
+                key="input_tdx_db_port"
+            )
+            st.session_state.temp_config["TDX_DB_PORT"] = db_port
+
+            db_user_info = config_info["TDX_DB_USER"]
+            db_user = st.text_input(
+                f"👤 {db_user_info['description']}",
+                value=st.session_state.temp_config.get("TDX_DB_USER", ""),
+                key="input_tdx_db_user"
+            )
+            st.session_state.temp_config["TDX_DB_USER"] = db_user
+
+        db_password_info = config_info["TDX_DB_PASSWORD"]
+        db_password = st.text_input(
+            f"🔐 {db_password_info['description']}",
+            value=st.session_state.temp_config.get("TDX_DB_PASSWORD", ""),
+            type="password",
+            key="input_tdx_db_password"
+        )
+        st.session_state.temp_config["TDX_DB_PASSWORD"] = db_password
+
+        save_cols = st.columns([1, 3])
+        with save_cols[0]:
+            if st.button("💾 保存数据源配置", type="primary", key="btn_save_data_sources"):
+                _persist_config()
+        with save_cols[1]:
+            st.caption("保存后将写入 .env，并在重启后应用于调度后端与数据库连接。")
 
         st.markdown("---")
         st.markdown("### 代理池与网络优化（仅当需要网络代理时配置）")
@@ -2971,28 +3086,7 @@ def display_config_manager():
 
     with col1:
         if st.button("💾 保存配置", type="primary", width='stretch'):
-            # 验证配置
-            is_valid, message = config_manager.validate_config(st.session_state.temp_config)
-
-            if is_valid:
-                # 保存配置
-                if config_manager.write_env(st.session_state.temp_config):
-                    st.success("✅ 配置已保存到 .env 文件")
-                    st.info("ℹ️ 请重启应用使配置生效")
-
-                    # 尝试重新加载配置
-                    try:
-                        config_manager.reload_config()
-                        st.success("✅ 配置已重新加载")
-                    except Exception as e:
-                        st.warning(f"⚠️ 配置重新加载失败: {e}")
-
-                    time.sleep(2)
-                    st.rerun()
-                else:
-                    st.error("❌ 保存配置失败")
-            else:
-                st.error(f"❌ 配置验证失败: {message}")
+            _persist_config()
 
     with col2:
         if st.button("🔄 重置", width='stretch'):
