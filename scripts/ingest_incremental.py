@@ -1,0 +1,545 @@
+"""Incremental ingestion driver for TDX datasets.
+
+Supports incremental updates for:
+  - kline_daily_qfq: front-adjusted daily bars
+  - kline_minute_raw: 1-minute raw bars
+
+The script uses the ingestion control tables (ingestion_runs,
+checkpoints, errors, state) to provide resumable, auditable updates.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import sys
+import uuid
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+import psycopg2
+import psycopg2.extras as pgx
+import requests
+
+pgx.register_uuid()
+
+TDX_API_BASE = os.getenv("TDX_API_BASE", "http://localhost:8080")
+DB_CFG = dict(
+    host=os.getenv("TDX_DB_HOST", "localhost"),
+    port=int(os.getenv("TDX_DB_PORT", "5432")),
+    user=os.getenv("TDX_DB_USER", "postgres"),
+    password=os.getenv("TDX_DB_PASSWORD", ""),
+    dbname=os.getenv("TDX_DB_NAME", "aistock"),
+)
+SUPPORTED_DATASETS = {"kline_daily_qfq", "kline_minute_raw"}
+EXCHANGE_MAP = {"sh": "SH", "sz": "SZ", "bj": "BJ"}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="TDX incremental ingestion")
+    parser.add_argument(
+        "--datasets",
+        type=str,
+        default="kline_daily_qfq,kline_minute_raw",
+        help="Comma separated datasets from {kline_daily_qfq,kline_minute_raw}",
+    )
+    parser.add_argument("--date", type=str, default=dt.date.today().isoformat(), help="Target date YYYY-MM-DD")
+    parser.add_argument(
+        "--start-date",
+        type=str,
+        default=None,
+        help="Optional override start date for daily dataset (YYYY-MM-DD)",
+    )
+    parser.add_argument("--exchanges", type=str, default="sh,sz", help="Comma separated exchanges (sh,sz,bj)")
+    parser.add_argument("--batch-size", type=int, default=100, help="Codes per batch")
+    parser.add_argument("--max-empty", type=int, default=2, help="Minute dataset: stop after N empty days")
+    return parser.parse_args()
+
+
+def http_get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    url = TDX_API_BASE.rstrip("/") + path
+    resp = requests.get(url, params=params, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    if isinstance(data, dict) and data.get("code") != 0:
+        raise RuntimeError(f"TDX API error {path}: {data}")
+    return data
+
+
+def normalize_ts_code(code: str) -> Optional[str]:
+    code = (code or "").strip()
+    if len(code) != 6 or not code.isdigit():
+        return None
+    if code.startswith("6"):
+        suffix = "SH"
+    elif code.startswith(("8", "4")):
+        suffix = "BJ"
+    else:
+        suffix = "SZ"
+    return f"{code}.{suffix}"
+
+
+def fetch_codes(exchanges: Optional[Iterable[str]]) -> List[str]:
+    targets = [ex.strip().lower() for ex in exchanges if ex] if exchanges else ["all"]
+    result: List[str] = []
+    seen = set()
+    for exch in targets:
+        params = {"exchange": exch} if exch and exch != "all" else {}
+        try:
+            data = http_get("/api/codes", params=params)
+        except Exception as exc:  # noqa: BLE001 - bubble up for caller handling
+            label = exch if exch else "all"
+            print(f"[ERROR] 获取交易所 {label} 股票列表失败: {exc}")
+            raise
+        payload = data.get("data") if isinstance(data, dict) else None
+        if isinstance(payload, dict):
+            rows = payload.get("codes") or []
+        else:
+            rows = payload or []
+        for item in rows:
+            code = item.get("code") if isinstance(item, dict) else str(item)
+            ts_code = normalize_ts_code(code)
+            if ts_code and ts_code not in seen:
+                seen.add(ts_code)
+                result.append(ts_code)
+    return result
+
+
+def get_db_codes(conn, exchanges: Iterable[str]) -> List[str]:
+    exchange_values = [EXCHANGE_MAP.get(ex.lower()) for ex in exchanges if ex.lower() in EXCHANGE_MAP]
+    query = "SELECT ts_code FROM market.symbol_dim"
+    params: Tuple[Any, ...] = ()
+    if exchange_values:
+        placeholders = ",".join(["%s"] * len(exchange_values))
+        query += f" WHERE exchange IN ({placeholders})"
+        params = tuple(exchange_values)
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        return [row[0] for row in cur.fetchall()]
+
+
+def chunked(items: List[str], size: int) -> Iterable[List[str]]:
+    for idx in range(0, len(items), size):
+        yield items[idx : idx + size]
+
+
+def _to_date(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if "T" in text:
+        try:
+            return dt.datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+        except ValueError:
+            pass
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        return text
+    if len(text) == 8 and text.isdigit():
+        return f"{text[0:4]}-{text[4:6]}-{text[6:8]}"
+    return text
+
+
+def fetch_daily(code: str, start: str, end: str) -> List[Dict[str, Any]]:
+    params = {"code": code, "type": "day", "adjust": "qfq", "start": start, "end": end}
+    data = http_get("/api/kline", params=params)
+    payload = data.get("data") if isinstance(data, dict) else None
+    if isinstance(payload, dict):
+        values = payload.get("List") or payload.get("list") or []
+    else:
+        values = payload or []
+    return list(values)
+
+
+def fetch_minute(code: str, trade_date: dt.date) -> List[Dict[str, Any]]:
+    params = {"code": code, "type": "minute1", "date": trade_date.strftime("%Y%m%d")}
+    data = http_get("/api/minute", params=params)
+    payload = data.get("data") if isinstance(data, dict) else None
+    if isinstance(payload, dict):
+        items = payload.get("List") or payload.get("list") or payload
+        if isinstance(items, dict):
+            items = items.get("List") or items.get("list") or []
+    else:
+        items = payload or []
+    return list(items)
+
+
+def upsert_daily(conn, ts_code: str, bars: List[Dict[str, Any]]) -> Tuple[int, Optional[str]]:
+    sql = (
+        "INSERT INTO market.kline_daily_qfq (trade_date, ts_code, open_li, high_li, low_li, close_li, volume_hand, amount_li, adjust_type, source) "
+        "VALUES %s ON CONFLICT (ts_code, trade_date) DO UPDATE SET "
+        "open_li=EXCLUDED.open_li, high_li=EXCLUDED.high_li, low_li=EXCLUDED.low_li, close_li=EXCLUDED.close_li, volume_hand=EXCLUDED.volume_hand, amount_li=EXCLUDED.amount_li"
+    )
+    values: List[Tuple[Any, ...]] = []
+    last_date: Optional[str] = None
+    for row in bars:
+        if not isinstance(row, dict):
+            continue
+        trade_date = _to_date(row.get("Date") or row.get("date") or row.get("Time") or row.get("time"))
+        open_li = row.get("Open") or row.get("open")
+        high_li = row.get("High") or row.get("high")
+        low_li = row.get("Low") or row.get("low")
+        close_li = row.get("Close") or row.get("close")
+        volume_hand = row.get("Volume") or row.get("volume") or 0
+        amount_li = row.get("Amount") or row.get("amount") or 0
+        if trade_date is None or open_li is None or high_li is None or low_li is None or close_li is None:
+            continue
+        last_date = trade_date if last_date is None or trade_date > last_date else last_date
+        values.append((trade_date, ts_code, open_li, high_li, low_li, close_li, volume_hand, amount_li, "qfq", "tdx_api"))
+    if not values:
+        return 0, None
+    with conn.cursor() as cur:
+        pgx.execute_values(cur, sql, values)
+    return len(values), last_date
+
+
+def _combine_trade_time(trade_date: dt.date, value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    cleaned = text.replace("Z", "+00:00")
+    try:
+        dt_obj = dt.datetime.fromisoformat(cleaned)
+        if dt_obj.tzinfo is None:
+            dt_obj = dt_obj.replace(tzinfo=dt.timezone.utc)
+        return dt_obj.isoformat()
+    except ValueError:
+        pass
+    for fmt in ("%H:%M:%S", "%H:%M"):
+        try:
+            time_obj = dt.datetime.strptime(text, fmt).time()
+            tzinfo = dt.timezone(dt.timedelta(hours=8))
+            return dt.datetime.combine(trade_date, time_obj).replace(tzinfo=tzinfo).isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def upsert_minute(conn, ts_code: str, trade_date: dt.date, bars: List[Dict[str, Any]]) -> Tuple[int, Optional[str]]:
+    sql = (
+        "INSERT INTO market.kline_minute_raw (trade_time, ts_code, freq, open_li, high_li, low_li, close_li, volume_hand, amount_li, adjust_type, source) "
+        "VALUES %s ON CONFLICT (ts_code, trade_time, freq) DO UPDATE SET "
+        "open_li=EXCLUDED.open_li, high_li=EXCLUDED.high_li, low_li=EXCLUDED.low_li, close_li=EXCLUDED.close_li, volume_hand=EXCLUDED.volume_hand, amount_li=EXCLUDED.amount_li"
+    )
+    values: List[Tuple[Any, ...]] = []
+    last_ts: Optional[str] = None
+    for row in bars:
+        if not isinstance(row, dict):
+            continue
+        trade_time = row.get("TradeTime") or row.get("trade_time") or row.get("Time") or row.get("time")
+        trade_time_iso = _combine_trade_time(trade_date, trade_time)
+        open_li = row.get("Open") or row.get("open")
+        high_li = row.get("High") or row.get("high")
+        low_li = row.get("Low") or row.get("low")
+        close_li = row.get("Close") or row.get("close") or row.get("Price") or row.get("price")
+        volume_hand = row.get("Volume") or row.get("volume") or 0
+        amount_li = row.get("Amount") or row.get("amount") or 0
+        if trade_time_iso is None or close_li is None:
+            continue
+        last_ts = trade_time_iso if last_ts is None or trade_time_iso > last_ts else last_ts
+        values.append((trade_time_iso, ts_code, "1m", open_li, high_li, low_li, close_li, volume_hand, amount_li, "none", "tdx_api"))
+    if not values:
+        return 0, None
+    with conn.cursor() as cur:
+        pgx.execute_values(cur, sql, values)
+    return len(values), last_ts
+
+
+def create_run(conn, dataset: str, params: Dict[str, Any]) -> uuid.UUID:
+    run_id = uuid.uuid4()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO market.ingestion_runs (run_id, mode, dataset, status, created_at, started_at, params)
+            VALUES (%s, 'incremental', %s, 'running', NOW(), NOW(), %s)
+            """,
+            (run_id, dataset, json.dumps(params, ensure_ascii=False)),
+        )
+    return run_id
+
+
+def finish_run(conn, run_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE market.ingestion_runs SET status=%s, finished_at=NOW(), summary=%s WHERE run_id=%s",
+            (status, json.dumps(summary, ensure_ascii=False), run_id),
+        )
+
+
+def create_job(conn, job_type: str, summary: Dict[str, Any]) -> uuid.UUID:
+    job_id = uuid.uuid4()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO market.ingestion_jobs (job_id, job_type, status, created_at, started_at, summary)
+            VALUES (%s, %s, 'running', NOW(), NOW(), %s)
+            """,
+            (job_id, job_type, json.dumps(summary, ensure_ascii=False)),
+        )
+    return job_id
+
+
+def finish_job(conn, job_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE market.ingestion_jobs
+               SET status=%s, finished_at=NOW(), summary=%s
+             WHERE job_id=%s
+            """,
+            (status, json.dumps(summary, ensure_ascii=False), job_id),
+        )
+
+
+def create_task(
+    conn,
+    job_id: uuid.UUID,
+    dataset: str,
+    ts_code: str,
+    date_from: Optional[dt.date],
+    date_to: Optional[dt.date],
+) -> uuid.UUID:
+    task_id = uuid.uuid4()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO market.ingestion_job_tasks (task_id, job_id, dataset, ts_code, date_from, date_to, status, progress)
+            VALUES (%s, %s, %s, %s, %s, %s, 'running', 0)
+            """,
+            (task_id, job_id, dataset, ts_code, date_from, date_to),
+        )
+    return task_id
+
+
+def complete_task(conn, task_id: uuid.UUID, success: bool, progress: float, last_error: Optional[str]) -> None:
+    status = "success" if success else "failed"
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE market.ingestion_job_tasks
+               SET status=%s, progress=%s, last_error=%s, updated_at=NOW()
+             WHERE task_id=%s
+            """,
+            (status, progress, last_error, task_id),
+        )
+
+
+def log_ingestion(conn, job_id: uuid.UUID, level: str, message: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO market.ingestion_logs (job_id, ts, level, message) VALUES (%s, NOW(), %s, %s)",
+            (job_id, level.upper(), message),
+        )
+
+
+def get_state(conn, dataset: str, ts_code: str) -> Tuple[Optional[dt.date], Optional[dt.datetime]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT last_success_date, last_success_time FROM market.ingestion_state WHERE dataset=%s AND ts_code=%s",
+            (dataset, ts_code),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None, None
+        last_date = row[0]
+        last_time = row[1]
+        return last_date, last_time
+
+
+def upsert_state(
+    conn,
+    dataset: str,
+    ts_code: str,
+    last_date: Optional[dt.date],
+    last_time: Optional[str],
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO market.ingestion_state (dataset, ts_code, last_success_date, last_success_time, extra)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (dataset, ts_code)
+            DO UPDATE SET last_success_date=EXCLUDED.last_success_date,
+                          last_success_time=EXCLUDED.last_success_time,
+                          extra=EXCLUDED.extra
+            """,
+            (dataset, ts_code, last_date, last_time, json.dumps(extra, ensure_ascii=False) if extra else None),
+        )
+
+
+def upsert_checkpoint(
+    conn,
+    run_id: uuid.UUID,
+    dataset: str,
+    ts_code: str,
+    cursor_date: Optional[dt.date],
+    cursor_time: Optional[str],
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO market.ingestion_checkpoints (run_id, dataset, ts_code, cursor_date, cursor_time, extra)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (run_id, dataset, ts_code)
+            DO UPDATE SET cursor_date=EXCLUDED.cursor_date,
+                          cursor_time=EXCLUDED.cursor_time,
+                          extra=EXCLUDED.extra
+            """,
+            (run_id, dataset, ts_code, cursor_date, cursor_time,
+             json.dumps(extra, ensure_ascii=False) if extra else None),
+        )
+
+
+def log_error(
+    conn,
+    run_id: uuid.UUID,
+    dataset: str,
+    ts_code: Optional[str],
+    message: str,
+    detail: Optional[Dict[str, Any]] = None,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO market.ingestion_errors (run_id, dataset, ts_code, message, detail) VALUES (%s, %s, %s, %s, %s)",
+            (run_id, dataset, ts_code, message, json.dumps(detail, ensure_ascii=False) if detail else None),
+        )
+
+
+def ingest(
+    conn,
+    dataset: str,
+    target_date: dt.date,
+    start_override: Optional[dt.date],
+    batch_size: int,
+) -> None:
+    params = {
+        "target_date": target_date.isoformat(),
+        "start_date_override": start_override.isoformat() if start_override else None,
+        "batch_size": batch_size,
+    }
+    job_params = {
+        "datasets": [dataset],
+        "target_date": target_date.isoformat(),
+        "start_override": params["start_date_override"],
+        "batch_size": batch_size,
+    }
+    job_id = create_job(conn, "incremental", job_params)
+    log_ingestion(conn, job_id, "info", "start incremental ingestion job")
+
+    params["job_id"] = str(job_id)
+    run_id = create_run(conn, dataset, params)
+    stats = {"total_codes": 0, "success_codes": 0, "failed_codes": 0, "inserted_rows": 0}
+    log_ingestion(conn, job_id, "info", f"run {run_id} start incremental ingestion")
+
+    codes = fetch_codes(None)
+    if not codes:
+        print("[ERROR] /api/codes returned no results; aborting")
+        finish_run(conn, run_id, "failed", {"reason": "no_codes"})
+        finish_job(conn, job_id, "failed", {"run_id": str(run_id), "reason": "no_codes"})
+        return
+
+    for batch in chunked(codes, batch_size):
+        for ts_code in batch:
+            task_id = create_task(
+                conn,
+                job_id,
+                dataset,
+                ts_code,
+                dt.date.fromisoformat(target_date.isoformat()) if target_date else None,
+                target_date,
+            )
+            task_success = False
+            try:
+                if dataset == "kline_daily_qfq":
+                    bars = fetch_daily(ts_code.split(".")[0], start_override.isoformat() if start_override else None, target_date.isoformat())
+                    inserted, last_fetched = upsert_daily(conn, ts_code, bars)
+                elif dataset == "kline_minute_raw":
+                    bars = fetch_minute(ts_code.split(".")[0], target_date)
+                    inserted, last_ts = upsert_minute(conn, ts_code, target_date, bars)
+                else:
+                    raise ValueError(f"Unsupported dataset: {dataset}")
+                stats["inserted_rows"] += inserted
+                if inserted > 0:
+                    if dataset == "kline_daily_qfq":
+                        new_last_date = dt.date.fromisoformat(last_fetched)
+                        upsert_state(conn, dataset, ts_code, new_last_date, None, None)
+                        upsert_checkpoint(conn, run_id, dataset, ts_code, new_last_date, None, None)
+                    elif dataset == "kline_minute_raw":
+                        last_dt = dt.datetime.fromisoformat(last_ts) if last_ts else None
+                        upsert_state(conn, dataset, ts_code, target_date, last_dt, None)
+                        upsert_checkpoint(conn, run_id, dataset, ts_code, target_date, last_ts, None)
+                stats["success_codes"] += 1
+                task_success = True
+                print(f"[OK] {dataset} {ts_code} inserted={inserted}")
+                log_ingestion(conn, job_id, "info", f"run {run_id} {dataset} {ts_code} inserted={inserted}")
+            except Exception as exc:  # noqa: BLE001
+                stats["failed_codes"] += 1
+                log_error(
+                    conn,
+                    run_id,
+                    dataset,
+                    ts_code,
+                    str(exc),
+                    detail={"code": ts_code.split(".")[0], "start": start_override.isoformat() if start_override else None, "end": target_date.isoformat()},
+                )
+                print(f"[WARN] {dataset} {ts_code} failed: {exc}")
+                log_ingestion(conn, job_id, "error", f"run {run_id} {dataset} {ts_code} failed: {exc}")
+            complete_task(conn, task_id, task_success, 100.0 if task_success else 0.0, None if task_success else str(exc))
+            stats["total_codes"] += 1
+    status = "success" if stats["failed_codes"] == 0 else "failed"
+    finish_run(conn, run_id, status, stats)
+    finish_job(conn, job_id, status, {"run_id": str(run_id), "stats": stats})
+    log_ingestion(
+        conn,
+        job_id,
+        "info",
+        f"run {run_id} finished status={status} stats={json.dumps(stats, ensure_ascii=False)}",
+    )
+    print(f"[DONE] run status={status} stats={stats}")
+
+
+def main() -> None:
+    args = parse_args()
+    try:
+        target_date = dt.date.fromisoformat(args.date)
+    except ValueError:
+        print("[ERROR] invalid --date format")
+        sys.exit(1)
+
+    start_override = None
+    if args.start_date:
+        try:
+            start_override = dt.date.fromisoformat(args.start_date)
+        except ValueError:
+            print("[ERROR] invalid --start-date format")
+            sys.exit(1)
+
+    datasets = [d.strip() for d in args.datasets.split(",") if d.strip()]
+    invalid = [d for d in datasets if d not in SUPPORTED_DATASETS]
+    if invalid:
+        print(f"[ERROR] unsupported datasets: {invalid}")
+        sys.exit(1)
+
+    exchanges = [ex.strip().lower() for ex in args.exchanges.split(",") if ex.strip()]
+
+    with psycopg2.connect(**DB_CFG) as conn:
+        conn.autocommit = True
+        codes = get_db_codes(conn, exchanges)
+        if not codes:
+            print("[ERROR] no codes found in market.symbol_dim; run symbol ingestion first")
+            sys.exit(1)
+
+        if "kline_daily_qfq" in datasets:
+            ingest_daily(conn, codes, target_date, start_override, args.batch_size)
+
+        if "kline_minute_raw" in datasets:
+            ingest_minute(conn, codes, target_date, args.batch_size, args.max_empty)
+
+
+if __name__ == "__main__":
+    main()

@@ -14,3 +14,6 @@ reportlab>=4.0.0
 peewee>=3.17.0
 schedule>=1.2.0 
 pywencai>=0.7.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.23.0
+psycopg2-binary>=2.9.9

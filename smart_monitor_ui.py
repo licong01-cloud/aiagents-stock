@@ -12,7 +12,7 @@ from typing import Dict
 from dotenv import load_dotenv
 
 from smart_monitor_engine import SmartMonitorEngine
-from smart_monitor_db import SmartMonitorDB
+from pg_smart_monitor_repo import SmartMonitorDB
 from config_manager import config_manager  # 使用主程序的配置管理器
 
 

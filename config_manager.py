@@ -38,6 +38,42 @@ class ConfigManager:
                 "required": False,
                 "type": "text"
             },
+            "TDX_BACKEND_BASE": {
+                "value": "http://localhost:8080",
+                "description": "TDX调度后端服务地址（可选）",
+                "required": False,
+                "type": "text"
+            },
+            "TDX_DB_HOST": {
+                "value": "localhost",
+                "description": "TimescaleDB主机",
+                "required": False,
+                "type": "text"
+            },
+            "TDX_DB_PORT": {
+                "value": "5432",
+                "description": "TimescaleDB端口",
+                "required": False,
+                "type": "text"
+            },
+            "TDX_DB_NAME": {
+                "value": "aistock",
+                "description": "TimescaleDB数据库名称",
+                "required": False,
+                "type": "text"
+            },
+            "TDX_DB_USER": {
+                "value": "postgres",
+                "description": "TimescaleDB用户名",
+                "required": False,
+                "type": "text"
+            },
+            "TDX_DB_PASSWORD": {
+                "value": "",
+                "description": "TimescaleDB密码",
+                "required": False,
+                "type": "password"
+            },
             "MINIQMT_ENABLED": {
                 "value": "false",
                 "description": "启用MiniQMT量化交易",
@@ -238,6 +274,16 @@ class ConfigManager:
             # TDX本地数据源配置
             lines.append("# ========== TDX本地数据源（可选）==========")
             lines.append(f'TDX_API_BASE="{config.get("TDX_API_BASE", "http://localhost:8080")}"')
+            lines.append(f'TDX_BACKEND_BASE="{config.get("TDX_BACKEND_BASE", "http://localhost:8080")}"')
+            lines.append("")
+
+            # TimescaleDB配置
+            lines.append("# ========== TimescaleDB数据库配置（TDX调度与数据入库）==========")
+            lines.append(f'TDX_DB_HOST="{config.get("TDX_DB_HOST", "localhost")}"')
+            lines.append(f'TDX_DB_PORT="{config.get("TDX_DB_PORT", "5432")}"')
+            lines.append(f'TDX_DB_NAME="{config.get("TDX_DB_NAME", "aistock")}"')
+            lines.append(f'TDX_DB_USER="{config.get("TDX_DB_USER", "postgres")}"')
+            lines.append(f'TDX_DB_PASSWORD="{config.get("TDX_DB_PASSWORD", "")}"')
             lines.append("")
             
             # MiniQMT配置
