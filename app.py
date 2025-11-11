@@ -425,7 +425,7 @@ def main():
         st.markdown(f"**监测服务**: {monitor_status}")
 
         try:
-            from monitor_db import monitor_db
+            from pg_monitor_repo import monitor_db
             stocks = monitor_db.get_monitored_stocks()
             notifications = monitor_db.get_pending_notifications()
             record_count = db.get_record_count()
@@ -2225,7 +2225,7 @@ def display_add_to_monitor_dialog(record):
         rating = final_decision.get('rating', '买入')
 
         # 检查是否已经在监测列表中
-        from monitor_db import monitor_db
+        from pg_monitor_repo import monitor_db
         existing_stocks = monitor_db.get_monitored_stocks()
         is_duplicate = any(stock['symbol'] == record['symbol'] for stock in existing_stocks)
 

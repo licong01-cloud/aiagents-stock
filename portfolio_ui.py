@@ -336,7 +336,7 @@ def display_batch_analysis():
                 sync_result = None  # 初始化同步结果
                 if auto_sync:
                     with st.spinner("正在同步到监测列表..."):
-                        from monitor_db import monitor_db
+                        from pg_monitor_repo import monitor_db
                         
                         # 准备同步数据
                         monitors_to_sync = []

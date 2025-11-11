@@ -262,7 +262,7 @@ class PortfolioScheduler:
             同步结果统计
         """
         try:
-            from monitor_db import monitor_db
+            from pg_monitor_repo import monitor_db
             
             # 准备批量监测数据
             monitors_data = []

@@ -984,7 +984,7 @@ def display_main_force_batch_results(batch_results):
                             pass
 
                     # 调用监测管理器添加
-                    from monitor_db import monitor_db
+                    from pg_monitor_repo import monitor_db
 
                     try:
                         # 准备进场区间数据
