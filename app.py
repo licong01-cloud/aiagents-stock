@@ -12,7 +12,7 @@ from model_config import model_options
 
 from ai_agents import StockAnalysisAgents
 from pdf_generator import display_pdf_export_section
-from database import db
+from pg_stock_analysis_repo import db
 from unified_data_access import UnifiedDataAccess
 from monitor_manager import display_monitor_manager, get_monitor_summary
 from monitor_service import monitor_service
