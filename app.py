@@ -18,7 +18,6 @@ from monitor_manager import display_monitor_manager, get_monitor_summary
 from monitor_service import monitor_service
 from notification_service import notification_service
 from config_manager import config_manager
-from tdx_ui import show_local_data_management
 from main_force_ui import display_main_force_selector
 from sector_strategy_ui import display_sector_strategy
 from longhubang_ui import display_longhubang
@@ -26,6 +25,9 @@ from smart_monitor_ui import smart_monitor_ui
 from unified_data_access import unified_data_access as udao
 from network_optimizer import network_optimizer, NetworkOptimizer
 from debug_logger import debug_logger, safe_index
+from watchlist_ui import display_watchlist_manager
+from hotboard_ui import show_hotboard_page
+from tdx_ui import show_local_data_management
 
 # 页面配置
 st.set_page_config(
@@ -302,7 +304,7 @@ def main():
             # 清除所有功能页面标志
             for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
                        'show_sector_strategy', 'show_longhubang', 'show_portfolio', 'show_local_data',
-                       'show_smart_monitor']:
+                       'show_smart_monitor', 'show_watchlist']:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
@@ -313,10 +315,29 @@ def main():
         with st.expander("🎯 选股板块", expanded=True):
             st.markdown("**根据不同策略筛选优质股票**")
 
+            # 热点板块跟踪入口（嵌入主程序，使用同一端口）
+            if st.button("🔥 热点板块跟踪", width='stretch', key="nav_hotboard", help="查看热点板块热力图与Top20成分股"):
+                st.session_state.show_hotboard = True
+                # 清除其他功能页面标志，保持导航行为一致
+                for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
+                           'show_sector_strategy', 'show_longhubang', 'show_portfolio', 'show_local_data',
+                           'show_smart_monitor', 'show_watchlist']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
+
+            # 自选股票池入口，位于主力选股之上
+            if st.button("⭐ 自选股票池", width='stretch', key="nav_watchlist", help="管理自选股票池"):
+                st.session_state.show_watchlist = True
+                for key in ['show_history', 'show_monitor', 'show_config', 'show_sector_strategy',
+                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor', 'show_main_force']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+
             if st.button("💰 主力选股", width='stretch', key="nav_main_force", help="基于主力资金流向的选股策略"):
                 st.session_state.show_main_force = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_sector_strategy',
-                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor']:
+                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor', 'show_watchlist']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -328,7 +349,7 @@ def main():
             if st.button("🎯 智策板块", width='stretch', key="nav_sector_strategy", help="AI板块策略分析"):
                 st.session_state.show_sector_strategy = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_longhubang', 'show_portfolio', 'show_smart_monitor', 'show_local_data']:
+                           'show_longhubang', 'show_portfolio', 'show_smart_monitor', 'show_local_data', 'show_watchlist']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -336,7 +357,7 @@ def main():
             if st.button("🐉 智瞰龙虎", width='stretch', key="nav_longhubang", help="龙虎榜深度分析"):
                 st.session_state.show_longhubang = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_sector_strategy', 'show_portfolio', 'show_smart_monitor', 'show_local_data']:
+                           'show_sector_strategy', 'show_portfolio', 'show_smart_monitor', 'show_local_data', 'show_watchlist']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -348,7 +369,7 @@ def main():
             if st.button("📊 持仓分析", width='stretch', key="nav_portfolio", help="投资组合分析与定时跟踪"):
                 st.session_state.show_portfolio = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_sector_strategy', 'show_longhubang', 'show_smart_monitor', 'show_local_data']:
+                           'show_sector_strategy', 'show_longhubang', 'show_smart_monitor', 'show_local_data', 'show_watchlist']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -356,7 +377,7 @@ def main():
             if st.button("🤖 AI盯盘", width='stretch', key="nav_smart_monitor", help="DeepSeek AI自动盯盘决策交易（支持A股T+1）"):
                 st.session_state.show_smart_monitor = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_sector_strategy', 'show_longhubang', 'show_portfolio', 'show_local_data']:
+                           'show_sector_strategy', 'show_longhubang', 'show_portfolio', 'show_local_data', 'show_watchlist']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -364,7 +385,7 @@ def main():
             if st.button("📡 实时监测", width='stretch', key="nav_monitor", help="价格监控与预警提醒"):
                 st.session_state.show_monitor = True
                 for key in ['show_history', 'show_main_force', 'show_longhubang', 'show_portfolio',
-                           'show_config', 'show_sector_strategy', 'show_smart_monitor', 'show_local_data']:
+                           'show_config', 'show_sector_strategy', 'show_smart_monitor', 'show_local_data', 'show_watchlist']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -375,7 +396,7 @@ def main():
         if st.button("📖 历史记录", width='stretch', key="nav_history", help="查看历史分析记录"):
             st.session_state.show_history = True
             for key in ['show_monitor', 'show_longhubang', 'show_portfolio', 'show_config',
-                       'show_main_force', 'show_sector_strategy', 'show_local_data', 'show_smart_monitor']:
+                       'show_main_force', 'show_sector_strategy', 'show_local_data', 'show_smart_monitor', 'show_watchlist', 'show_hotboard']:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
@@ -384,15 +405,17 @@ def main():
         if st.button("⚙️ 环境配置", width='stretch', key="nav_config", help="系统设置与API配置"):
             st.session_state.show_config = True
             for key in ['show_history', 'show_monitor', 'show_main_force', 'show_sector_strategy',
-                       'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor']:
+                       'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor', 'show_watchlist', 'show_hotboard']:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
 
-        if st.button("🗄️ 本地数据管理", width='stretch', key="nav_local_data", help="管理TDX数据源及调度"):
+        # 🗄️ 本地数据管理（单服务多页面中的独立页面）
+        if st.button("🗄️ 本地数据管理", width='stretch', key="nav_local_data", help="管理TDX数据源与入库调度"):
             st.session_state.show_local_data = True
             for key in ['show_history', 'show_monitor', 'show_main_force', 'show_sector_strategy',
-                        'show_longhubang', 'show_portfolio', 'show_config', 'show_smart_monitor']:
+                        'show_longhubang', 'show_portfolio', 'show_config', 'show_smart_monitor',
+                        'show_hotboard', 'show_watchlist']:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
@@ -425,7 +448,7 @@ def main():
         st.markdown(f"**监测服务**: {monitor_status}")
 
         try:
-            from monitor_db import monitor_db
+            from pg_monitor_repo import monitor_db
             stocks = monitor_db.get_monitored_stocks()
             notifications = monitor_db.get_pending_notifications()
             record_count = db.get_record_count()
@@ -470,6 +493,12 @@ def main():
             7. AI团队分析 → 8. 团队讨论 → 9. 决策
             """)
 
+    # 优先渲染本地数据管理页面，确保不与股票分析界面混合
+    if st.session_state.get('show_local_data'):
+        show_local_data_management()
+        # 使用 st.stop() 硬停止脚本，避免后续任何股票分析UI被渲染
+        st.stop()
+
     # 检查是否显示历史记录
     if 'show_history' in st.session_state and st.session_state.show_history:
         display_history_records()
@@ -478,6 +507,16 @@ def main():
     # 检查是否显示监测面板
     if 'show_monitor' in st.session_state and st.session_state.show_monitor:
         display_monitor_manager()
+        return
+
+    # 检查是否显示自选股票池管理
+    if 'show_watchlist' in st.session_state and st.session_state.show_watchlist:
+        display_watchlist_manager()
+        return
+
+    # 检查是否显示热点板块跟踪
+    if 'show_hotboard' in st.session_state and st.session_state.show_hotboard:
+        show_hotboard_page(embed=True)
         return
 
     # 检查是否显示主力选股
@@ -506,17 +545,12 @@ def main():
         display_portfolio_manager()
         return
 
-    # 检查是否显示本地数据管理
-    if 'show_local_data' in st.session_state and st.session_state.show_local_data:
-        show_local_data_management()
-        return
-
     # 检查是否显示环境配置
     if 'show_config' in st.session_state and st.session_state.show_config:
         display_config_manager()
         return
 
-    # 主界面
+    # 主界面（股票分析）
     # 添加单个/批量分析切换
     col_mode1, col_mode2 = st.columns([1, 3])
     with col_mode1:
@@ -546,6 +580,7 @@ def main():
         with col1:
             stock_input = st.text_input(
                 "🔍 请输入股票代码或名称",
+                value=st.session_state.pop('prefill_stock_code', ''),
                 placeholder="例如: 000001, 00700",
                 help="仅支持A股(如000001)与港股(如00700/HK00700)"
             )
@@ -1640,7 +1675,7 @@ def display_stock_info(stock_info, indicators):
 
 def display_stock_chart(stock_data, stock_info):
     """显示股票图表"""
-    st.subheader("📈 股价走势图")
+    st.subheader("⭐ 自选股票池")
     
     # 类型检查和验证
     if stock_data is None:
@@ -2017,6 +2052,10 @@ def display_final_decision(final_decision, stock_info, agents_results=None, disc
 
 def show_example_interface():
     """显示示例界面"""
+    # 如果当前处于本地数据管理页面，则不渲染示例说明，避免与本地数据UI混合
+    if st.session_state.get('show_local_data'):
+        return
+
     st.subheader("💡 使用说明")
 
     col1, col2 = st.columns(2)
@@ -2077,10 +2116,24 @@ def display_history_records():
 
     st.write(f"📊 共找到 {len(records)} 条分析记录")
 
+    # 初始化分页状态
+    page_size = 10
+    if 'history_page' not in st.session_state:
+        st.session_state.history_page = 1
+    if 'history_current_search' not in st.session_state:
+        st.session_state.history_current_search = ''
+
     # 搜索和筛选
     col1, col2 = st.columns([3, 1])
     with col1:
-        search_term = st.text_input("🔍 搜索股票代码或名称", placeholder="输入股票代码或名称进行搜索")
+        _default_term = st.session_state.get('history_search_term', '')
+        search_term = st.text_input("🔍 搜索股票代码或名称", value=_default_term, placeholder="输入股票代码或名称进行搜索")
+        if 'history_search_term' in st.session_state:
+            del st.session_state['history_search_term']
+        # 搜索条件变更时重置分页
+        if search_term != st.session_state.history_current_search:
+            st.session_state.history_current_search = search_term
+            st.session_state.history_page = 1
     with col2:
         st.write("")
         st.write("")
@@ -2100,8 +2153,20 @@ def display_history_records():
         st.warning("🔍 未找到匹配的记录")
         return
 
-    # 显示记录列表
-    for record in filtered_records:
+    # 分页
+    total_records = len(filtered_records)
+    total_pages = max(1, (total_records + page_size - 1) // page_size)
+    current_page = min(max(1, st.session_state.history_page), total_pages)
+    st.session_state.history_page = current_page
+
+    start_idx = (current_page - 1) * page_size
+    end_idx = start_idx + page_size
+    page_records = filtered_records[start_idx:end_idx]
+
+    st.write(f"📄 第 {current_page} / {total_pages} 页，每页 {page_size} 条，共 {total_records} 条")
+
+    # 显示记录列表（当前页）
+    for record in page_records:
         # 根据评级设置颜色和图标
         rating = record.get('rating', '未知')
         rating_color = {
@@ -2142,6 +2207,19 @@ def display_history_records():
                         st.rerun()
                     else:
                         st.error("❌ 删除失败")
+
+    # 分页控制
+    col_prev, col_page, col_next = st.columns([1, 2, 1])
+    with col_prev:
+        if st.button("⬅️ 上一页", disabled=(current_page <= 1)):
+            st.session_state.history_page = max(1, current_page - 1)
+            st.rerun()
+    with col_page:
+        st.write(f"当前第 {current_page} 页 / 共 {total_pages} 页")
+    with col_next:
+        if st.button("下一页 ➡️", disabled=(current_page >= total_pages)):
+            st.session_state.history_page = min(total_pages, current_page + 1)
+            st.rerun()
 
     # 查看详细记录
     if 'viewing_record_id' in st.session_state:
@@ -2225,7 +2303,7 @@ def display_add_to_monitor_dialog(record):
         rating = final_decision.get('rating', '买入')
 
         # 检查是否已经在监测列表中
-        from monitor_db import monitor_db
+        from pg_monitor_repo import monitor_db
         existing_stocks = monitor_db.get_monitored_stocks()
         is_duplicate = any(stock['symbol'] == record['symbol'] for stock in existing_stocks)
 

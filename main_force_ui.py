@@ -10,6 +10,8 @@ from main_force_analysis import MainForceAnalyzer
 from main_force_pdf_generator import display_report_download_section
 from main_force_history_ui import display_batch_history
 import pandas as pd
+from pg_watchlist_repo import watchlist_repo
+from data_source_manager import data_source_manager
 
 def display_main_force_selector():
     """显示主力选股界面"""
@@ -313,6 +315,62 @@ def display_analysis_results(result: dict, analyzer):
         # 显示统计
         st.caption(f"共 {len(display_df)} 只候选股票，显示 {len(final_cols)} 个字段")
 
+        # 添加到自选股票池
+        with st.expander("➕ 添加到自选股票池", expanded=False):
+            # 分类列表与新建
+            cats = watchlist_repo.list_categories()
+            cat_names = [c["name"] for c in cats]
+            col_w1, col_w2 = st.columns([2, 1])
+            with col_w1:
+                sel_cat = st.selectbox("选择分类", options=(cat_names or ["默认"]))
+            with col_w2:
+                move_if_exists = st.checkbox("存在则移动", value=False,
+                                             help="如股票已在其他分类中，选中后会移动到当前分类")
+
+            # 选择股票代码（来自候选DF）
+            codes_series = analyzer.raw_stocks.get('股票代码')
+            code_options = []
+            if codes_series is not None:
+                for v in list(codes_series.astype(str)):
+                    code_options.append(v)
+            codes_selected = st.multiselect("选择要添加的股票代码", options=code_options, default=code_options[:10])
+
+            # 新建分类输入
+            new_cat_name = st.text_input("新建分类（可选）", placeholder="输入新分类名后点击创建")
+            col_c1, col_c2 = st.columns([1, 1])
+            with col_c1:
+                if st.button("创建分类", disabled=(not new_cat_name.strip())):
+                    try:
+                        cid = watchlist_repo.create_category(new_cat_name.strip(), None)
+                        st.success(f"已创建分类: {new_cat_name}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"创建分类失败: {e}")
+            with col_c2:
+                if st.button("添加到自选", disabled=(not codes_selected)):
+                    # 解析分类ID
+                    cats = watchlist_repo.list_categories()
+                    target = next((c for c in cats if c["name"] == sel_cat), None)
+                    if not target:
+                        try:
+                            cid = watchlist_repo.create_category(sel_cat, None)
+                            target = {"id": cid, "name": sel_cat}
+                        except Exception as e:
+                            st.error(f"创建分类失败: {e}")
+                            target = None
+                    if target:
+                        # 规范化代码为 ts_code（去除后缀，再加市场后缀）
+                        norm_codes = []
+                        for c in codes_selected:
+                            c = str(c)
+                            c6 = c.split('.')[0] if '.' in c else c
+                            norm_codes.append(data_source_manager._convert_to_ts_code(c6))
+                        try:
+                            res = watchlist_repo.add_items_bulk(norm_codes, target["id"], on_conflict=("move" if move_if_exists else "ignore"))
+                            st.success(f"添加完成：新增 {res['added']}，跳过 {res['skipped']}，移动 {res['moved']}")
+                        except Exception as e:
+                            st.error(f"添加失败: {e}")
+
         # 下载按钮
         csv = display_df.to_csv(index=False, encoding='utf-8-sig')
         st.download_button(
@@ -599,6 +657,10 @@ def run_main_force_batch_analysis():
     col_confirm, col_cancel = st.columns(2)
 
     start_analysis = False
+    # 从自选跳转时自动开始
+    auto_start = st.session_state.pop('main_force_batch_auto_start', False)
+    if auto_start:
+        start_analysis = True
     with col_confirm:
         if st.button("🚀 确认开始分析", type="primary", width='content'):
             start_analysis = True
@@ -984,7 +1046,7 @@ def display_main_force_batch_results(batch_results):
                             pass
 
                     # 调用监测管理器添加
-                    from monitor_db import monitor_db
+                    from pg_monitor_repo import monitor_db
 
                     try:
                         # 准备进场区间数据

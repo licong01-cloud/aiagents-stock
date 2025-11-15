@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List
 import json
 
-from monitor_db import monitor_db
+from pg_monitor_repo import monitor_db
 from monitor_service import monitor_service
 from notification_service import notification_service
 from stock_data import StockDataFetcher

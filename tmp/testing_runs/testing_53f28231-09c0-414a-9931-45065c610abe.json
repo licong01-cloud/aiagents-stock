@@ -1,0 +1,164 @@
+{
+  "results": [
+    {
+      "name": "GET /api/quote",
+      "success": true,
+      "detail": "single=1 multi=2"
+    },
+    {
+      "name": "_test_kline",
+      "success": false,
+      "detail": "HTTP error: HTTPConnectionPool(host='localhost', port=8080): Read timed out. (read timeout=10.0)"
+    },
+    {
+      "name": "_test_minute",
+      "success": false,
+      "detail": "unexpected error: object of type 'NoneType' has no len()"
+    },
+    {
+      "name": "_test_trade",
+      "success": false,
+      "detail": "unexpected error: object of type 'NoneType' has no len()"
+    },
+    {
+      "name": "GET /api/search",
+      "success": true,
+      "detail": "matches=50"
+    },
+    {
+      "name": "_test_stock_info",
+      "success": false,
+      "detail": "HTTP error: HTTPConnectionPool(host='localhost', port=8080): Read timed out. (read timeout=10.0)"
+    },
+    {
+      "name": "GET /api/codes",
+      "success": true,
+      "detail": "total=5454 sample=600000"
+    },
+    {
+      "name": "GET /api/codes?exchange=sh",
+      "success": true,
+      "detail": "count=2293"
+    },
+    {
+      "name": "POST /api/batch-quote",
+      "success": true,
+      "detail": "items=3"
+    },
+    {
+      "name": "_test_kline_history",
+      "success": false,
+      "detail": "HTTP error: HTTPConnectionPool(host='localhost', port=8080): Read timed out. (read timeout=10.0)"
+    },
+    {
+      "name": "GET /api/index",
+      "success": true,
+      "detail": "items=100"
+    },
+    {
+      "name": "GET /api/server-status",
+      "success": true,
+      "detail": "status=running"
+    },
+    {
+      "name": "GET /api/etf",
+      "success": true,
+      "detail": "items=5"
+    },
+    {
+      "name": "_test_trade_history",
+      "success": false,
+      "detail": "unexpected error: object of type 'NoneType' has no len()"
+    },
+    {
+      "name": "_test_minute_trade_all",
+      "success": false,
+      "detail": "unexpected error: object of type 'NoneType' has no len()"
+    },
+    {
+      "name": "GET /api/workday",
+      "success": true,
+      "detail": "is_workday=False"
+    },
+    {
+      "name": "GET /api/market-count",
+      "success": true,
+      "detail": "total=48066"
+    },
+    {
+      "name": "GET /api/stock-codes",
+      "success": true,
+      "detail": "items=10"
+    },
+    {
+      "name": "GET /api/etf-codes",
+      "success": true,
+      "detail": "items=10"
+    },
+    {
+      "name": "GET /api/kline-all",
+      "success": true,
+      "detail": "items=200 time=0.42s"
+    },
+    {
+      "name": "GET /api/index/all",
+      "success": true,
+      "detail": "items=200 time=0.45s"
+    },
+    {
+      "name": "GET /api/trade-history/full",
+      "success": true,
+      "detail": "items=300 time=0.13s"
+    },
+    {
+      "name": "GET /api/workday/range",
+      "success": true,
+      "detail": "days=8"
+    },
+    {
+      "name": "_test_income",
+      "success": false,
+      "detail": "HTTP error: HTTPConnectionPool(host='localhost', port=8080): Read timed out. (read timeout=10.0)"
+    },
+    {
+      "name": "GET /api/tasks",
+      "success": true,
+      "detail": "count=10"
+    },
+    {
+      "name": "POST /api/tasks/pull-kline",
+      "success": true,
+      "detail": "task_id=ddb78650-b72a-4a84-96c7-f84ed8944941"
+    },
+    {
+      "name": "POST /api/tasks/pull-trade",
+      "success": true,
+      "detail": "task_id=0537b54c-f5e2-4e2a-afbb-0cf186920bc8"
+    },
+    {
+      "name": "GET /api/tasks/ddb78650-b72a-4a84-96c7-f84ed8944941",
+      "success": true,
+      "detail": "running"
+    },
+    {
+      "name": "POST /api/tasks/ddb78650-b72a-4a84-96c7-f84ed8944941/cancel",
+      "success": true,
+      "detail": "success"
+    },
+    {
+      "name": "GET /api/tasks/0537b54c-f5e2-4e2a-afbb-0cf186920bc8",
+      "success": true,
+      "detail": "running"
+    },
+    {
+      "name": "POST /api/tasks/0537b54c-f5e2-4e2a-afbb-0cf186920bc8/cancel",
+      "success": true,
+      "detail": "success"
+    }
+  ],
+  "summary": {
+    "total": 31,
+    "success": 23,
+    "failed": 8
+  }
+}

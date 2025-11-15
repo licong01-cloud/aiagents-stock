@@ -20,6 +20,10 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import psycopg2
 import psycopg2.extras as pgx
 import requests
+try:
+    from tqdm import tqdm  # type: ignore
+except Exception:  # noqa: BLE001
+    tqdm = None  # type: ignore
 
 pgx.register_uuid()
 
@@ -53,6 +57,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--exchanges", type=str, default="sh,sz", help="Comma separated exchanges (sh,sz,bj)")
     parser.add_argument("--batch-size", type=int, default=100, help="Codes per batch")
     parser.add_argument("--max-empty", type=int, default=2, help="Minute dataset: stop after N empty days")
+    parser.add_argument("--job-id", type=str, default=None, help="Attach to existing job id (pre-created by backend)")
+    parser.add_argument("--bulk-session-tune", action="store_true", help="Apply session-level tuning for bulk load")
     return parser.parse_args()
 
 
@@ -258,7 +264,24 @@ def create_run(conn, dataset: str, params: Dict[str, Any]) -> uuid.UUID:
             """,
             (run_id, dataset, json.dumps(params, ensure_ascii=False)),
         )
-    return run_id
+
+
+def update_job_summary(conn, job_id: uuid.UUID, patch: Dict[str, Any]) -> None:
+    with conn.cursor() as cur:
+        cur.execute("SELECT summary FROM market.ingestion_jobs WHERE job_id=%s", (job_id,))
+        row = cur.fetchone()
+        base: Dict[str, Any] = {}
+        if row and row[0]:
+            try:
+                base = json.loads(row[0]) if isinstance(row[0], str) else dict(row[0])
+            except Exception:
+                base = {}
+        for k, v in (patch or {}).items():
+            if isinstance(v, (int, float)) and isinstance(base.get(k), (int, float)):
+                base[k] = type(base.get(k))(base.get(k, 0) + v)
+            else:
+                base[k] = v
+        cur.execute("UPDATE market.ingestion_jobs SET summary=%s WHERE job_id=%s", (json.dumps(base, ensure_ascii=False), job_id))
 
 
 def finish_run(conn, run_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
@@ -280,6 +303,18 @@ def create_job(conn, job_type: str, summary: Dict[str, Any]) -> uuid.UUID:
             (job_id, job_type, json.dumps(summary, ensure_ascii=False)),
         )
     return job_id
+
+
+def start_job(conn, job_id: uuid.UUID, summary: Dict[str, Any]) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE market.ingestion_jobs
+               SET status='running', started_at=NOW(), summary=%s
+             WHERE job_id=%s
+            """,
+            (json.dumps(summary, ensure_ascii=False), job_id),
+        )
 
 
 def finish_job(conn, job_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
@@ -410,97 +445,170 @@ def log_error(
         )
 
 
-def ingest(
+def ingest_daily(
     conn,
-    dataset: str,
+    codes: List[str],
     target_date: dt.date,
     start_override: Optional[dt.date],
     batch_size: int,
+    job_id_opt: Optional[str] = None,
 ) -> None:
+    dataset = "kline_daily_qfq"
     params = {
         "target_date": target_date.isoformat(),
         "start_date_override": start_override.isoformat() if start_override else None,
         "batch_size": batch_size,
     }
-    job_params = {
-        "datasets": [dataset],
-        "target_date": target_date.isoformat(),
-        "start_override": params["start_date_override"],
-        "batch_size": batch_size,
-    }
-    job_id = create_job(conn, "incremental", job_params)
-    log_ingestion(conn, job_id, "info", "start incremental ingestion job")
-
+    job_params = {"datasets": [dataset], **params}
+    job_id = uuid.UUID(job_id_opt) if job_id_opt else create_job(conn, "incremental", job_params)
+    if job_id_opt:
+        start_job(conn, job_id, job_params)
+    log_ingestion(conn, job_id, "info", "start incremental daily job")
     params["job_id"] = str(job_id)
     run_id = create_run(conn, dataset, params)
     stats = {"total_codes": 0, "success_codes": 0, "failed_codes": 0, "inserted_rows": 0}
-    log_ingestion(conn, job_id, "info", f"run {run_id} start incremental ingestion")
-
-    codes = fetch_codes(None)
-    if not codes:
-        print("[ERROR] /api/codes returned no results; aborting")
-        finish_run(conn, run_id, "failed", {"reason": "no_codes"})
-        finish_job(conn, job_id, "failed", {"run_id": str(run_id), "reason": "no_codes"})
-        return
-
+    # Initialize summary counters for UI fallback
+    update_job_summary(conn, job_id, {"total_codes": len(codes), "success_codes": 0, "failed_codes": 0, "inserted_rows": 0})
+    pbar = None
+    if tqdm is not None:
+        try:
+            pbar = tqdm(total=len(codes), desc="kline_daily_qfq incr", unit="code")
+        except Exception:
+            pbar = None
     for batch in chunked(codes, batch_size):
         for ts_code in batch:
-            task_id = create_task(
-                conn,
-                job_id,
-                dataset,
-                ts_code,
-                dt.date.fromisoformat(target_date.isoformat()) if target_date else None,
-                target_date,
-            )
-            task_success = False
+            task_id = create_task(conn, job_id, dataset, ts_code, start_override, target_date)
+            ok = False
+            err: Optional[str] = None
             try:
-                if dataset == "kline_daily_qfq":
-                    bars = fetch_daily(ts_code.split(".")[0], start_override.isoformat() if start_override else None, target_date.isoformat())
-                    inserted, last_fetched = upsert_daily(conn, ts_code, bars)
-                elif dataset == "kline_minute_raw":
-                    bars = fetch_minute(ts_code.split(".")[0], target_date)
-                    inserted, last_ts = upsert_minute(conn, ts_code, target_date, bars)
-                else:
-                    raise ValueError(f"Unsupported dataset: {dataset}")
+                bars = fetch_daily(ts_code.split(".")[0], params["start_date_override"], target_date.isoformat())
+                inserted, last_fetched = upsert_daily(conn, ts_code, bars)
                 stats["inserted_rows"] += inserted
-                if inserted > 0:
-                    if dataset == "kline_daily_qfq":
-                        new_last_date = dt.date.fromisoformat(last_fetched)
-                        upsert_state(conn, dataset, ts_code, new_last_date, None, None)
-                        upsert_checkpoint(conn, run_id, dataset, ts_code, new_last_date, None, None)
-                    elif dataset == "kline_minute_raw":
-                        last_dt = dt.datetime.fromisoformat(last_ts) if last_ts else None
-                        upsert_state(conn, dataset, ts_code, target_date, last_dt, None)
-                        upsert_checkpoint(conn, run_id, dataset, ts_code, target_date, last_ts, None)
+                if inserted > 0 and last_fetched:
+                    new_last_date = dt.date.fromisoformat(last_fetched)
+                    upsert_state(conn, dataset, ts_code, new_last_date, None, None)
+                    upsert_checkpoint(conn, run_id, dataset, ts_code, new_last_date, None, None)
                 stats["success_codes"] += 1
-                task_success = True
+                try:
+                    update_job_summary(conn, job_id, {"inserted_rows": int(inserted), "success_codes": 1})
+                except Exception:
+                    pass
+                ok = True
                 print(f"[OK] {dataset} {ts_code} inserted={inserted}")
                 log_ingestion(conn, job_id, "info", f"run {run_id} {dataset} {ts_code} inserted={inserted}")
             except Exception as exc:  # noqa: BLE001
+                err = str(exc)
                 stats["failed_codes"] += 1
+                try:
+                    update_job_summary(conn, job_id, {"failed_codes": 1})
+                except Exception:
+                    pass
                 log_error(
                     conn,
                     run_id,
                     dataset,
                     ts_code,
-                    str(exc),
-                    detail={"code": ts_code.split(".")[0], "start": start_override.isoformat() if start_override else None, "end": target_date.isoformat()},
+                    err,
+                    detail={"code": ts_code.split(".")[0], "start": params["start_date_override"], "end": target_date.isoformat()},
                 )
-                print(f"[WARN] {dataset} {ts_code} failed: {exc}")
-                log_ingestion(conn, job_id, "error", f"run {run_id} {dataset} {ts_code} failed: {exc}")
-            complete_task(conn, task_id, task_success, 100.0 if task_success else 0.0, None if task_success else str(exc))
+                print(f"[WARN] {dataset} {ts_code} failed: {err}")
+                log_ingestion(conn, job_id, "error", f"run {run_id} {dataset} {ts_code} failed: {err}")
+            complete_task(conn, task_id, ok, 100.0 if ok else 0.0, None if ok else err)
             stats["total_codes"] += 1
+            if pbar is not None:
+                try:
+                    pbar.update(1)
+                except Exception:
+                    pass
+    if pbar is not None:
+        try:
+            pbar.close()
+        except Exception:
+            pass
     status = "success" if stats["failed_codes"] == 0 else "failed"
     finish_run(conn, run_id, status, stats)
     finish_job(conn, job_id, status, {"run_id": str(run_id), "stats": stats})
-    log_ingestion(
-        conn,
-        job_id,
-        "info",
-        f"run {run_id} finished status={status} stats={json.dumps(stats, ensure_ascii=False)}",
-    )
-    print(f"[DONE] run status={status} stats={stats}")
+    log_ingestion(conn, job_id, "info", f"run {run_id} finished status={status} stats={json.dumps(stats, ensure_ascii=False)}")
+    print(f"[DONE] daily status={status} stats={stats}")
+
+
+def ingest_minute(
+    conn,
+    codes: List[str],
+    target_date: dt.date,
+    batch_size: int,
+    max_empty: int,
+    job_id_opt: Optional[str] = None,
+) -> None:
+    dataset = "kline_minute_raw"
+    params = {
+        "target_date": target_date.isoformat(),
+        "batch_size": batch_size,
+        "max_empty": max_empty,
+    }
+    job_params = {"datasets": [dataset], **params}
+    job_id = uuid.UUID(job_id_opt) if job_id_opt else create_job(conn, "incremental", job_params)
+    if job_id_opt:
+        start_job(conn, job_id, job_params)
+    log_ingestion(conn, job_id, "info", "start incremental minute job")
+    params["job_id"] = str(job_id)
+    run_id = create_run(conn, dataset, params)
+    stats = {"total_codes": 0, "success_codes": 0, "failed_codes": 0, "inserted_rows": 0}
+    update_job_summary(conn, job_id, {"total_codes": len(codes), "success_codes": 0, "failed_codes": 0, "inserted_rows": 0})
+    pbar = None
+    if tqdm is not None:
+        try:
+            pbar = tqdm(total=len(codes), desc="kline_minute_raw incr", unit="code")
+        except Exception:
+            pbar = None
+    for batch in chunked(codes, batch_size):
+        for ts_code in batch:
+            task_id = create_task(conn, job_id, dataset, ts_code, target_date, target_date)
+            ok = False
+            err: Optional[str] = None
+            try:
+                bars = fetch_minute(ts_code.split(".")[0], target_date)
+                inserted, last_ts = upsert_minute(conn, ts_code, target_date, bars)
+                stats["inserted_rows"] += inserted
+                if inserted > 0:
+                    last_dt = dt.datetime.fromisoformat(last_ts) if last_ts else None
+                    upsert_state(conn, dataset, ts_code, target_date, last_dt, None)
+                    upsert_checkpoint(conn, run_id, dataset, ts_code, target_date, last_ts, None)
+                stats["success_codes"] += 1
+                try:
+                    update_job_summary(conn, job_id, {"inserted_rows": int(inserted), "success_codes": 1})
+                except Exception:
+                    pass
+                ok = True
+                print(f"[OK] {dataset} {ts_code} inserted={inserted}")
+                log_ingestion(conn, job_id, "info", f"run {run_id} {dataset} {ts_code} inserted={inserted}")
+            except Exception as exc:  # noqa: BLE001
+                err = str(exc)
+                stats["failed_codes"] += 1
+                try:
+                    update_job_summary(conn, job_id, {"failed_codes": 1})
+                except Exception:
+                    pass
+                log_error(conn, run_id, dataset, ts_code, err, detail={"code": ts_code.split(".")[0], "date": target_date.isoformat()})
+                print(f"[WARN] {dataset} {ts_code} failed: {err}")
+                log_ingestion(conn, job_id, "error", f"run {run_id} {dataset} {ts_code} failed: {err}")
+            complete_task(conn, task_id, ok, 100.0 if ok else 0.0, None if ok else err)
+            stats["total_codes"] += 1
+            if pbar is not None:
+                try:
+                    pbar.update(1)
+                except Exception:
+                    pass
+    if pbar is not None:
+        try:
+            pbar.close()
+        except Exception:
+            pass
+    status = "success" if stats["failed_codes"] == 0 else "failed"
+    finish_run(conn, run_id, status, stats)
+    finish_job(conn, job_id, status, {"run_id": str(run_id), "stats": stats})
+    log_ingestion(conn, job_id, "info", f"run {run_id} finished status={status} stats={json.dumps(stats, ensure_ascii=False)}")
+    print(f"[DONE] minute status={status} stats={stats}")
 
 
 def main() -> None:
@@ -529,16 +637,20 @@ def main() -> None:
 
     with psycopg2.connect(**DB_CFG) as conn:
         conn.autocommit = True
+        if args.bulk_session_tune:
+            with conn.cursor() as cur:
+                cur.execute("SET synchronous_commit = off")
+                cur.execute("SET work_mem = '256MB'")
         codes = get_db_codes(conn, exchanges)
         if not codes:
             print("[ERROR] no codes found in market.symbol_dim; run symbol ingestion first")
             sys.exit(1)
 
         if "kline_daily_qfq" in datasets:
-            ingest_daily(conn, codes, target_date, start_override, args.batch_size)
+            ingest_daily(conn, codes, target_date, start_override, args.batch_size, args.job_id)
 
         if "kline_minute_raw" in datasets:
-            ingest_minute(conn, codes, target_date, args.batch_size, args.max_empty)
+            ingest_minute(conn, codes, target_date, args.batch_size, args.max_empty, args.job_id)
 
 
 if __name__ == "__main__":

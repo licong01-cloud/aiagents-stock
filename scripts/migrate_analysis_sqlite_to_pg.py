@@ -2,6 +2,7 @@ import argparse
 import os
 import sqlite3
 import json
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -76,13 +77,26 @@ def _parse_dt(s: str) -> datetime:
         return datetime.now(timezone.utc)
 
 
+def _sanitize_numbers(obj: Any) -> Any:
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, list):
+        return [_sanitize_numbers(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _sanitize_numbers(v) for k, v in obj.items()}
+    return obj
+
+
 def _to_json(val: Any) -> Any:
     if val is None or val == "":
         return None
     if isinstance(val, (dict, list)):
-        return val
+        return _sanitize_numbers(val)
     try:
-        return json.loads(val)
+        data = json.loads(val, parse_constant=lambda _c: None)
+        return _sanitize_numbers(data)
     except Exception:
         return None
 

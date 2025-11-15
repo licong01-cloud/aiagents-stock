@@ -72,6 +72,53 @@ def _to_json(val: Any) -> Any:
         return None
 
 
+def _parse_date(s: Any):
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(str(s), fmt).date()
+        except Exception:
+            continue
+    return None
+
+
+def row_get(r: sqlite3.Row, key: str, default=None):
+    try:
+        if key in r.keys():
+            return r[key]
+        return default
+    except Exception:
+        return default
+
+
+def _num(v):
+    if v is None:
+        return None
+    try:
+        f = float(v)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
+    except Exception:
+        return None
+
+
+def _int(v):
+    if v is None:
+        return None
+    try:
+        return int(v)
+    except Exception:
+        try:
+            f = float(v)
+            if math.isnan(f) or math.isinf(f):
+                return None
+            return int(f)
+        except Exception:
+            return None
+
+
 def _count_sqlite(sqlite_path: str, table: str) -> int:
     if not os.path.exists(sqlite_path):
         return 0
@@ -108,20 +155,20 @@ def migrate_monitor_tasks(sqlite_path: str, batch: int) -> int:
                     (
                         r["task_name"],
                         r["stock_code"],
-                        r["stock_name"],
-                        bool(r["enabled"] or 0),
-                        int(r["check_interval"] or 300),
-                        bool(r["auto_trade"] or 0),
-                        r["position_size_pct"],
-                        r["stop_loss_pct"],
-                        r["take_profit_pct"],
-                        r["qmt_account_id"],
-                        r["notify_email"],
-                        r["notify_webhook"],
-                        bool(r.get("has_position", 0)),
-                        r.get("position_cost", 0),
-                        r.get("position_quantity", 0),
-                        r.get("position_date"),
+                        row_get(r, "stock_name"),
+                        bool(row_get(r, "enabled", 0)),
+                        _int(row_get(r, "check_interval", 300)) or 300,
+                        bool(row_get(r, "auto_trade", 0)),
+                        _num(row_get(r, "position_size_pct")),
+                        _num(row_get(r, "stop_loss_pct")),
+                        _num(row_get(r, "take_profit_pct")),
+                        row_get(r, "qmt_account_id"),
+                        row_get(r, "notify_email"),
+                        row_get(r, "notify_webhook"),
+                        bool(row_get(r, "has_position", 0)),
+                        _num(row_get(r, "position_cost", 0)),
+                        _int(row_get(r, "position_quantity", 0)) or 0,
+                        _parse_date(row_get(r, "position_date")),
                     )
                 )
             with psycopg2.connect(**_pg_conn_params()) as conn:
@@ -155,21 +202,21 @@ def migrate_ai_decisions(sqlite_path: str, batch: int) -> int:
                 values.append(
                     (
                         r["stock_code"],
-                        r["stock_name"],
+                        row_get(r, "stock_name"),
                         _parse_dt(r["decision_time"]),
-                        r["trading_session"],
+                        row_get(r, "trading_session"),
                         r["action"],
-                        r["confidence"],
-                        r["reasoning"],
-                        r["position_size_pct"],
-                        r["stop_loss_pct"],
-                        r["take_profit_pct"],
-                        r["risk_level"],
-                        pg_extras.Json(_to_json(r["key_price_levels"]) or {}),
-                        pg_extras.Json(_to_json(r["market_data"]) or {}),
-                        pg_extras.Json(_to_json(r["account_info"]) or {}),
-                        bool(r["executed"] or 0),
-                        r["execution_result"],
+                        _int(row_get(r, "confidence")),
+                        row_get(r, "reasoning"),
+                        _num(row_get(r, "position_size_pct")),
+                        _num(row_get(r, "stop_loss_pct")),
+                        _num(row_get(r, "take_profit_pct")),
+                        row_get(r, "risk_level"),
+                        pg_extras.Json(_to_json(row_get(r, "key_price_levels")) or {}),
+                        pg_extras.Json(_to_json(row_get(r, "market_data")) or {}),
+                        pg_extras.Json(_to_json(row_get(r, "account_info")) or {}),
+                        bool(row_get(r, "executed", 0)),
+                        row_get(r, "execution_result"),
                     )
                 )
             with psycopg2.connect(**_pg_conn_params()) as conn:
@@ -203,18 +250,18 @@ def migrate_trade_records(sqlite_path: str, batch: int) -> int:
                 values.append(
                     (
                         r["stock_code"],
-                        r["stock_name"],
+                        row_get(r, "stock_name"),
                         r["trade_type"],
-                        r["quantity"],
-                        r["price"],
-                        r["amount"],
-                        r["order_id"],
-                        r["order_status"],
-                        r["ai_decision_id"],
+                        _int(row_get(r, "quantity")),
+                        _num(row_get(r, "price")),
+                        _num(row_get(r, "amount")),
+                        row_get(r, "order_id"),
+                        row_get(r, "order_status"),
+                        _int(row_get(r, "ai_decision_id")),
                         _parse_dt(r["trade_time"]),
-                        r["commission"],
-                        r["tax"],
-                        r["profit_loss"],
+                        _num(row_get(r, "commission", 0)),
+                        _num(row_get(r, "tax", 0)),
+                        _num(row_get(r, "profit_loss", 0)),
                     )
                 )
             with psycopg2.connect(**_pg_conn_params()) as conn:
@@ -248,18 +295,18 @@ def migrate_position_monitor(sqlite_path: str, batch: int) -> int:
                 values.append(
                     (
                         r["stock_code"],
-                        r["stock_name"],
-                        r["quantity"],
-                        r["cost_price"],
-                        r["current_price"],
-                        r["profit_loss"],
-                        r["profit_loss_pct"],
-                        r["holding_days"],
-                        r["buy_date"],
-                        r["stop_loss_price"],
-                        r["take_profit_price"],
-                        _parse_dt(r["last_check_time"]),
-                        r.get("status", "holding"),
+                        row_get(r, "stock_name"),
+                        _int(row_get(r, "quantity")),
+                        _num(row_get(r, "cost_price")),
+                        _num(row_get(r, "current_price")),
+                        _num(row_get(r, "profit_loss")),
+                        _num(row_get(r, "profit_loss_pct")),
+                        _int(row_get(r, "holding_days")),
+                        row_get(r, "buy_date"),
+                        _num(row_get(r, "stop_loss_price")),
+                        _num(row_get(r, "take_profit_price")),
+                        _parse_dt(row_get(r, "last_check_time")),
+                        row_get(r, "status", "holding"),
                     )
                 )
             with psycopg2.connect(**_pg_conn_params()) as conn:
@@ -292,14 +339,14 @@ def migrate_notifications(sqlite_path: str, batch: int) -> int:
             for r in rows:
                 values.append(
                     (
-                        r.get("stock_code") or None,
-                        r.get("notify_type") or r.get("type"),
-                        r.get("notify_target"),
-                        r.get("subject"),
-                        r.get("content") or r.get("message"),
-                        r.get("status", "pending"),
-                        _parse_dt(r.get("sent_at")) if r.get("sent_at") else None,
-                        _parse_dt(r.get("created_at")) if r.get("created_at") else datetime.now(timezone.utc),
+                        row_get(r, "stock_code"),
+                        row_get(r, "notify_type") or row_get(r, "type"),
+                        row_get(r, "notify_target"),
+                        row_get(r, "subject"),
+                        row_get(r, "content") or row_get(r, "message"),
+                        row_get(r, "status", "pending"),
+                        _parse_dt(row_get(r, "sent_at")) if row_get(r, "sent_at") else None,
+                        _parse_dt(row_get(r, "created_at")) if row_get(r, "created_at") else datetime.now(timezone.utc),
                     )
                 )
             with psycopg2.connect(**_pg_conn_params()) as conn:
@@ -332,11 +379,11 @@ def migrate_system_logs(sqlite_path: str, batch: int) -> int:
             for r in rows:
                 values.append(
                     (
-                        r.get("log_level"),
-                        r.get("module"),
-                        r.get("message"),
-                        r.get("details"),
-                        _parse_dt(r.get("created_at")),
+                        row_get(r, "log_level"),
+                        row_get(r, "module"),
+                        row_get(r, "message"),
+                        row_get(r, "details"),
+                        _parse_dt(row_get(r, "created_at")),
                     )
                 )
             with psycopg2.connect(**_pg_conn_params()) as conn:

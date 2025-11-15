@@ -26,10 +26,79 @@ def main():
     ddl: List[str] = [
         "CREATE EXTENSION IF NOT EXISTS timescaledb",
         "CREATE SCHEMA IF NOT EXISTS app",
+        # keep existing data; do not drop analysis_records
+        # monitored_stocks (regular)
+        """
+        CREATE TABLE IF NOT EXISTS app.monitored_stocks (
+          id                    BIGSERIAL PRIMARY KEY,
+          symbol                TEXT NOT NULL,
+          name                  TEXT NOT NULL,
+          rating                TEXT NOT NULL,
+          entry_range           JSONB,
+          take_profit           NUMERIC,
+          stop_loss             NUMERIC,
+          current_price         NUMERIC,
+          last_checked          TIMESTAMPTZ,
+          check_interval        INT DEFAULT 30,
+          notification_enabled  BOOLEAN DEFAULT TRUE,
+          quant_enabled         BOOLEAN DEFAULT FALSE,
+          quant_config          JSONB,
+          created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE(symbol)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_ms_symbol ON app.monitored_stocks (symbol)",
+        # price_history (hypertable)
+        """
+        CREATE TABLE IF NOT EXISTS app.price_history (
+          id         BIGSERIAL NOT NULL,
+          stock_id   BIGINT,
+          price      NUMERIC NOT NULL,
+          timestamp  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (id, timestamp)
+        )
+        """,
+        "SELECT create_hypertable('app.price_history', 'timestamp', if_not_exists => TRUE)",
+        "CREATE INDEX IF NOT EXISTS idx_ph_stock_time ON app.price_history (stock_id, timestamp DESC)",
+        # portfolio_stocks (regular)
+        """
+        CREATE TABLE IF NOT EXISTS app.portfolio_stocks (
+          id            BIGSERIAL PRIMARY KEY,
+          code          TEXT NOT NULL UNIQUE,
+          name          TEXT NOT NULL,
+          cost_price    NUMERIC,
+          quantity      INT,
+          note          TEXT,
+          auto_monitor  BOOLEAN DEFAULT TRUE,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """,
+        # portfolio_analysis_history (hypertable on analysis_time)
+        """
+        CREATE TABLE IF NOT EXISTS app.portfolio_analysis_history (
+          id                 BIGSERIAL NOT NULL,
+          portfolio_stock_id BIGINT NOT NULL,
+          analysis_time      TIMESTAMPTZ NOT NULL DEFAULT now(),
+          rating             TEXT,
+          confidence         NUMERIC,
+          current_price      NUMERIC,
+          target_price       NUMERIC,
+          entry_min          NUMERIC,
+          entry_max          NUMERIC,
+          take_profit        NUMERIC,
+          stop_loss          NUMERIC,
+          summary            TEXT,
+          PRIMARY KEY (id, analysis_time)
+        )
+        """,
+        "SELECT create_hypertable('app.portfolio_analysis_history', 'analysis_time', if_not_exists => TRUE)",
+        "CREATE INDEX IF NOT EXISTS idx_pah_stock_time ON app.portfolio_analysis_history (portfolio_stock_id, analysis_time DESC)",
         # analysis_records
         """
         CREATE TABLE IF NOT EXISTS app.analysis_records (
-          id              BIGSERIAL PRIMARY KEY,
+          id              BIGSERIAL NOT NULL,
           ts_code         TEXT,
           stock_name      TEXT,
           period          TEXT NOT NULL,
@@ -38,7 +107,8 @@ def main():
           agents_results  JSONB,
           discussion_result JSONB,
           final_decision  JSONB,
-          created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (id, created_at)
         )
         """,
         "SELECT create_hypertable('app.analysis_records', 'created_at', if_not_exists => TRUE)",
@@ -49,7 +119,7 @@ def main():
         # ai_decisions
         """
         CREATE TABLE IF NOT EXISTS app.ai_decisions (
-          id                BIGSERIAL PRIMARY KEY,
+          id                BIGSERIAL NOT NULL,
           stock_code        TEXT NOT NULL,
           stock_name        TEXT,
           decision_time     TIMESTAMPTZ NOT NULL,
@@ -66,7 +136,8 @@ def main():
           account_info      JSONB,
           executed          BOOLEAN DEFAULT FALSE,
           execution_result  TEXT,
-          created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+          created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (id, decision_time)
         )
         """,
         "SELECT create_hypertable('app.ai_decisions', 'decision_time', if_not_exists => TRUE)",
@@ -75,7 +146,7 @@ def main():
         # trade_records
         """
         CREATE TABLE IF NOT EXISTS app.trade_records (
-          id            BIGSERIAL PRIMARY KEY,
+          id            BIGSERIAL NOT NULL,
           stock_code    TEXT NOT NULL,
           stock_name    TEXT,
           trade_type    TEXT NOT NULL,
@@ -89,7 +160,8 @@ def main():
           commission    NUMERIC DEFAULT 0,
           tax           NUMERIC DEFAULT 0,
           profit_loss   NUMERIC DEFAULT 0,
-          created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (id, trade_time)
         )
         """,
         "SELECT create_hypertable('app.trade_records', 'trade_time', if_not_exists => TRUE)",
@@ -147,7 +219,7 @@ def main():
         # notifications
         """
         CREATE TABLE IF NOT EXISTS app.notifications (
-          id            BIGSERIAL PRIMARY KEY,
+          id            BIGSERIAL NOT NULL,
           stock_code    TEXT,
           notify_type   TEXT NOT NULL,
           notify_target TEXT,
@@ -156,7 +228,8 @@ def main():
           status        TEXT DEFAULT 'pending',
           error_msg     TEXT,
           sent_at       TIMESTAMPTZ,
-          created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (id, created_at)
         )
         """,
         "SELECT create_hypertable('app.notifications', 'created_at', if_not_exists => TRUE)",
@@ -164,12 +237,13 @@ def main():
         # system_logs
         """
         CREATE TABLE IF NOT EXISTS app.system_logs (
-          id         BIGSERIAL PRIMARY KEY,
+          id         BIGSERIAL NOT NULL,
           log_level  TEXT,
           module     TEXT,
           message    TEXT,
           details    TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (id, created_at)
         )
         """,
         "SELECT create_hypertable('app.system_logs', 'created_at', if_not_exists => TRUE)",
@@ -200,12 +274,13 @@ def main():
         # sector_signals
         """
         CREATE TABLE IF NOT EXISTS app.sector_signals (
-          id           BIGSERIAL PRIMARY KEY,
+          id           BIGSERIAL NOT NULL,
           sector_code  TEXT NOT NULL,
           signal_time  TIMESTAMPTZ NOT NULL,
           score        NUMERIC,
           payload      JSONB,
-          created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (id, signal_time)
         )
         """,
         "SELECT create_hypertable('app.sector_signals', 'signal_time', if_not_exists => TRUE)",
@@ -213,18 +288,55 @@ def main():
         # longhubang
         """
         CREATE TABLE IF NOT EXISTS app.longhubang (
-          id          BIGSERIAL PRIMARY KEY,
+          id          BIGSERIAL NOT NULL,
           ts_code     TEXT NOT NULL,
           trade_date  DATE NOT NULL,
           direction   TEXT,
           amount      NUMERIC,
           ratio       NUMERIC,
           payload     JSONB,
-          created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (id, created_at)
         )
         """,
         "SELECT create_hypertable('app.longhubang', 'created_at', if_not_exists => TRUE)",
         "CREATE INDEX IF NOT EXISTS idx_lhb_code_date ON app.longhubang (ts_code, trade_date DESC)",
+        # watchlist categories (remain the same)
+        """
+        CREATE TABLE IF NOT EXISTS app.watchlist_categories (
+          id          BIGSERIAL PRIMARY KEY,
+          name        TEXT NOT NULL UNIQUE,
+          description TEXT,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """,
+        # watchlist items (many-to-many; no category_id column)
+        """
+        CREATE TABLE IF NOT EXISTS app.watchlist_items (
+          id           BIGSERIAL PRIMARY KEY,
+          code         TEXT NOT NULL UNIQUE,
+          name         TEXT NOT NULL,
+          note         TEXT,
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_wi_code ON app.watchlist_items (code)",
+        # watchlist item-category mapping (join table)
+        """
+        CREATE TABLE IF NOT EXISTS app.watchlist_item_categories (
+          item_id     BIGINT NOT NULL REFERENCES app.watchlist_items(id) ON DELETE CASCADE,
+          category_id BIGINT NOT NULL REFERENCES app.watchlist_categories(id) ON DELETE CASCADE,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (item_id, category_id)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_wic_item ON app.watchlist_item_categories (item_id)",
+        "CREATE INDEX IF NOT EXISTS idx_wic_cat ON app.watchlist_item_categories (category_id)",
+        # ensure default categories exist
+        "INSERT INTO app.watchlist_categories(name, description) VALUES ('默认', '默认分类') ON CONFLICT (name) DO NOTHING",
+        "INSERT INTO app.watchlist_categories(name, description) VALUES ('持仓股票', '持仓自动归类') ON CONFLICT (name) DO NOTHING",
     ]
 
     params = _conn_params()

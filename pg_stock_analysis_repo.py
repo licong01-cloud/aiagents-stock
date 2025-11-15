@@ -1,5 +1,6 @@
 import os
 import json
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +14,41 @@ load_dotenv(override=True)
 
 
 class PgStockAnalysisRepository:
+    def _sanitize_json(self, obj: Any) -> Any:
+        try:
+            import numpy as np  # type: ignore
+            np_available = True
+        except Exception:
+            np_available = False
+
+        if isinstance(obj, dict):
+            return {k: self._sanitize_json(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            t = [self._sanitize_json(v) for v in obj]
+            return type(obj)(t) if isinstance(obj, tuple) else t
+        # numpy scalars
+        if np_available:
+            import numpy as np  # type: ignore
+            if isinstance(obj, np.floating):
+                if np.isnan(obj) or np.isinf(obj):
+                    return None
+                return float(obj)
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.bool_):
+                return bool(obj)
+        # python floats
+        if isinstance(obj, float):
+            if math.isnan(obj) or math.isinf(obj):
+                return None
+            return obj
+        return obj
+
+    def _safe_dumps(self, payload: Any) -> str:
+        cleaned = self._sanitize_json(payload)
+        # allow_nan=False ensures不产生 NaN/Infinity JSON
+        return json.dumps(cleaned, ensure_ascii=False, allow_nan=False, default=str)
+
     def save_analysis(self, symbol: str, stock_name: str, period: str, stock_info: Dict[str, Any],
                       agents_results: Dict[str, Any], discussion_result: Dict[str, Any],
                       final_decision: Dict[str, Any]) -> int:
@@ -31,10 +67,10 @@ class PgStockAnalysisRepository:
                         stock_name,
                         period,
                         analysis_dt,
-                        pg_extras.Json(stock_info),
-                        pg_extras.Json(agents_results),
-                        pg_extras.Json(discussion_result),
-                        pg_extras.Json(final_decision),
+                        pg_extras.Json(stock_info, dumps=self._safe_dumps),
+                        pg_extras.Json(agents_results, dumps=self._safe_dumps),
+                        pg_extras.Json(discussion_result, dumps=self._safe_dumps),
+                        pg_extras.Json(final_decision, dumps=self._safe_dumps),
                     ),
                 )
                 rid = cur.fetchone()[0]

@@ -183,8 +183,8 @@ def display_add_stock_form():
         with col1:
             code = st.text_input(
                 "股票代码*", 
-                placeholder="例如: 600519.SH 或 000001.SZ",
-                help="必填，格式：代码.市场（SH/SZ/HK/US）"
+                placeholder="例如: 600519 或 000001",
+                help="必填，6位数字；如带后缀也会自动识别"
             )
             name = st.text_input(
                 "股票名称", 
@@ -336,7 +336,7 @@ def display_batch_analysis():
                 sync_result = None  # 初始化同步结果
                 if auto_sync:
                     with st.spinner("正在同步到监测列表..."):
-                        from monitor_db import monitor_db
+                        from pg_monitor_repo import monitor_db
                         
                         # 准备同步数据
                         monitors_to_sync = []

@@ -1564,7 +1564,7 @@ def display_longhubang_batch_results(batch_results: dict):
 def add_to_monitor_from_longhubang(code: str, name: str, final_decision: dict):
     """从龙虎榜分析结果添加到监测列表"""
     try:
-        from monitor_db import monitor_db
+        from pg_monitor_repo import monitor_db
         import re
         
         # 提取数据（使用统一字段名和解析逻辑）

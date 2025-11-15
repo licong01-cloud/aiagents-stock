@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List
 import streamlit as st
 
-from monitor_db import monitor_db
+from pg_monitor_repo import monitor_db
 from stock_data import StockDataFetcher
 from miniqmt_interface import miniqmt, get_miniqmt_status
 from notification_service import notification_service
