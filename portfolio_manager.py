@@ -9,8 +9,10 @@ from typing import List, Dict, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-# 导入必要的模块
-from portfolio_db import portfolio_db
+# 导入必要的模块（TimescaleDB 实现）
+from pg_portfolio_db import portfolio_db
+from pg_watchlist_repo import watchlist_repo
+from data_source_manager import data_source_manager
 
 
 class PortfolioManager:
@@ -46,19 +48,43 @@ class PortfolioManager:
             (成功标志, 消息, 股票ID)
         """
         try:
-            # 验证股票代码格式
-            code = code.strip().upper()
-            if not code:
-                return False, "股票代码不能为空", None
-            
-            # 检查股票代码是否已存在
-            existing = self.db.get_stock_by_code(code)
+            # 验证股票代码格式（仅接受6位数字；若带后缀则取6位基码）
+            raw = (code or "").strip().upper()
+            base_code = data_source_manager._convert_from_ts_code(raw) if "." in raw else raw
+            if not base_code or len(base_code) != 6 or not base_code.isdigit():
+                return False, "股票代码必须为6位数字", None
+
+            # 统一数据接口解析名称与类型（股票/ETF），并拿到标准ts_code
+            sec = data_source_manager.get_security_name_and_type(base_code)
+            if not sec:
+                return False, f"未找到指定股票/ETF: {base_code}", None
+
+            # 检查股票代码是否已存在（以6位基码为唯一键）
+            existing = self.db.get_stock_by_code(base_code)
             if existing:
-                return False, f"股票代码 {code} 已存在", None
+                return False, f"股票代码 {base_code} 已存在", None
             
+            # 确保名称有效（数据库字段非空）；空则使用统一接口返回的名称
+            safe_name = (name.strip() if name else (sec.get("name") or base_code))
+
             # 添加到数据库
-            stock_id = self.db.add_stock(code, name, cost_price, quantity, note, auto_monitor)
-            return True, f"添加持仓股票成功: {code} {name}", stock_id
+            stock_id = self.db.add_stock(base_code, safe_name, cost_price, quantity, note, auto_monitor)
+            # 同步到自选股分类：持仓股票
+            try:
+                cats = watchlist_repo.list_categories()
+                cat_id = None
+                for c in cats:
+                    if c.get("name") == "持仓股票":
+                        cat_id = c.get("id")
+                        break
+                if not cat_id:
+                    cat_id = watchlist_repo.create_category("持仓股票", "持仓自动归类")
+                ts_code = sec.get("ts_code") or data_source_manager._convert_to_ts_code(base_code)
+                watchlist_repo.add_item(ts_code, safe_name, cat_id)
+            except Exception:
+                # 不影响主流程
+                pass
+            return True, f"添加持仓股票成功: {base_code} {safe_name}", stock_id
             
         except Exception as e:
             return False, f"添加失败: {str(e)}", None

@@ -1,12 +1,13 @@
-"""Full daily QFQ ingestion from TDX API into TimescaleDB.
+"""Full daily RAW ingestion from TDX API into TimescaleDB.
 
-This script iterates over all configured exchanges, fetches daily QFQ bars
-from the TDX API, and upserts them into market.kline_daily_qfq. Progress and
-errors are tracked via the ingestion_runs / ingestion_checkpoints /
-ingestion_errors tables created by init_market_schema.py.
+Iterates over all exchanges, fetches daily raw (no adjust) bars
+from the TDX API, and upserts them into market.kline_daily_raw.
+Tracks progress in ingestion_jobs/ingestion_job_tasks and updates
+job summary incrementally so UI can show a live progress bar
+(complete stocks / total A-shares).
 
-Usage example:
-    python scripts/ingest_full_daily.py --exchanges sh,sz --start-date 1990-01-01
+Usage:
+  python scripts/ingest_full_daily_raw.py --exchanges sh,sz --start-date 1990-01-01 --truncate
 """
 from __future__ import annotations
 
@@ -21,10 +22,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import psycopg2
 import psycopg2.extras as pgx
 import requests
-try:
-    from tqdm import tqdm  # type: ignore
-except Exception:  # noqa: BLE001
-    tqdm = None  # type: ignore
 
 pgx.register_uuid()
 
@@ -37,18 +34,18 @@ DB_CFG = dict(
     dbname=os.getenv("TDX_DB_NAME", "aistock"),
 )
 SUPPORTED_EXCHANGES = {"sh", "sz", "bj"}
-EXCHANGE_MAP = {"sh": "SH", "sz": "SZ", "bj": "BJ"}
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="TDX full daily QFQ ingestion")
-    parser.add_argument("--exchanges", type=str, default="sh,sz", help="Comma separated exchanges (sh,sz,bj)")
+    parser = argparse.ArgumentParser(description="TDX full daily RAW ingestion")
+    parser.add_argument("--exchanges", type=str, default="sh,sz,bj", help="Comma separated exchanges (sh,sz,bj)")
     parser.add_argument("--start-date", type=str, default="1990-01-01", help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end-date", type=str, default=dt.date.today().isoformat(), help="End date (YYYY-MM-DD)")
     parser.add_argument("--batch-size", type=int, default=100, help="Codes per batch (sequential batches)")
     parser.add_argument("--limit-codes", type=int, default=None, help="Optional limit on number of codes to process")
-    parser.add_argument("--bulk-session-tune", action="store_true", help="Apply session-level tuning for bulk load")
+    parser.add_argument("--truncate", action="store_true", help="TRUNCATE market.kline_daily_raw before run")
     parser.add_argument("--job-id", type=str, default=None, help="Existing job id to attach and update")
+    parser.add_argument("--bulk-session-tune", action="store_true", help="Apply session-level tuning for bulk load")
     return parser.parse_args()
 
 
@@ -82,7 +79,7 @@ def fetch_codes(exchanges: Iterable[str]) -> List[str]:
         params = {"exchange": exch} if exch != "all" else {}
         try:
             data = http_get("/api/codes", params=params)
-        except Exception as exc:  # noqa: BLE001 - surface API issues
+        except Exception as exc:  # noqa: BLE001
             print(f"[ERROR] 获取交易所 {exch} 股票列表失败: {exc}")
             raise
         payload = data.get("data") if isinstance(data, dict) else None
@@ -120,20 +117,38 @@ def _to_date(value: Any) -> Optional[str]:
     return text
 
 
-def fetch_kline_daily(code: str, start: str, end: str) -> List[Dict[str, Any]]:
-    params = {"code": code, "type": "day", "adjust": "qfq", "start": start, "end": end}
-    data = http_get("/api/kline", params=params)
+def fetch_kline_daily_raw(code: str, start: str, end: str) -> List[Dict[str, Any]]:
+    params = {"code": code, "type": "day"}
+    data = http_get("/api/kline-all/tdx", params=params)
     payload = data.get("data") if isinstance(data, dict) else None
     if isinstance(payload, dict):
-        values = payload.get("List") or payload.get("list") or []
+        values = payload.get("list") or payload.get("List") or []
     else:
         values = payload or []
-    return list(values)
+
+    if not values:
+        return []
+
+    start_date = start or ""
+    end_date = end or ""
+    selected: List[Tuple[str, Dict[str, Any]]] = []
+    for row in values:
+        trade_date = _to_date(row.get("Time") or row.get("Date") or row.get("time") or row.get("date"))
+        if trade_date is None:
+            continue
+        if start_date and trade_date < start_date:
+            continue
+        if end_date and trade_date > end_date:
+            continue
+        selected.append((trade_date, dict(row)))
+
+    selected.sort(key=lambda item: item[0])
+    return [row for _, row in selected]
 
 
-def upsert_kline_daily(conn, ts_code: str, bars: List[Dict[str, Any]]) -> Tuple[int, Optional[str]]:
+def upsert_kline_daily_raw(conn, ts_code: str, bars: List[Dict[str, Any]]) -> Tuple[int, Optional[str]]:
     sql = (
-        "INSERT INTO market.kline_daily_qfq (trade_date, ts_code, open_li, high_li, low_li, close_li, volume_hand, amount_li, adjust_type, source) "
+        "INSERT INTO market.kline_daily_raw (trade_date, ts_code, open_li, high_li, low_li, close_li, volume_hand, amount_li, adjust_type, source) "
         "VALUES %s ON CONFLICT (ts_code, trade_date) DO UPDATE SET "
         "open_li=EXCLUDED.open_li, high_li=EXCLUDED.high_li, low_li=EXCLUDED.low_li, close_li=EXCLUDED.close_li, volume_hand=EXCLUDED.volume_hand, amount_li=EXCLUDED.amount_li"
     )
@@ -152,7 +167,7 @@ def upsert_kline_daily(conn, ts_code: str, bars: List[Dict[str, Any]]) -> Tuple[
         if trade_date is None or open_li is None or high_li is None or low_li is None or close_li is None:
             continue
         last_date = trade_date if last_date is None or trade_date > last_date else last_date
-        values.append((trade_date, ts_code, open_li, high_li, low_li, close_li, volume_hand, amount_li, "qfq", "tdx_api"))
+        values.append((trade_date, ts_code, open_li, high_li, low_li, close_li, volume_hand, amount_li, "none", "tdx_api"))
     if not values:
         return 0, None
     with conn.cursor() as cur:
@@ -160,29 +175,7 @@ def upsert_kline_daily(conn, ts_code: str, bars: List[Dict[str, Any]]) -> Tuple[
     return len(values), last_date
 
 
-def create_run(conn, params: Dict[str, Any]) -> uuid.UUID:
-    run_id = uuid.uuid4()
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO market.ingestion_runs (
-                run_id, mode, dataset, status, created_at, started_at, params
-            ) VALUES (%s, 'full', 'kline_daily_qfq', 'running', NOW(), NOW(), %s)
-            """,
-            (run_id, json.dumps(params, ensure_ascii=False)),
-        )
-    return run_id
-
-
-def finish_run(conn, run_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """UPDATE market.ingestion_runs
-                   SET status=%s, finished_at=NOW(), summary=%s
-                 WHERE run_id=%s""",
-            (status, json.dumps(summary, ensure_ascii=False), run_id),
-        )
-
+# ------------------------ DB helpers ------------------------
 
 def create_job(conn, job_type: str, summary: Dict[str, Any]) -> uuid.UUID:
     job_id = uuid.uuid4()
@@ -193,6 +186,18 @@ def create_job(conn, job_type: str, summary: Dict[str, Any]) -> uuid.UUID:
             VALUES (%s, %s, 'running', NOW(), NOW(), %s)
             """,
             (job_id, job_type, json.dumps(summary, ensure_ascii=False)),
+        )
+
+
+def start_job(conn, job_id: uuid.UUID, summary: Dict[str, Any]) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE market.ingestion_jobs
+               SET status='running', started_at=NOW(), summary=%s
+             WHERE job_id=%s
+            """,
+            (json.dumps(summary, ensure_ascii=False), job_id),
         )
     return job_id
 
@@ -206,6 +211,53 @@ def finish_job(conn, job_id: uuid.UUID, status: str, summary: Dict[str, Any]) ->
              WHERE job_id=%s
             """,
             (status, json.dumps(summary, ensure_ascii=False), job_id),
+        )
+
+
+def update_job_summary(conn, job_id: uuid.UUID, patch: Dict[str, Any]) -> None:
+    # Read-modify-write summary JSON to accumulate counters
+    with conn.cursor() as cur:
+        cur.execute("SELECT summary FROM market.ingestion_jobs WHERE job_id=%s", (job_id,))
+        row = cur.fetchone()
+        base = {}
+        if row and row[0]:
+            try:
+                base = json.loads(row[0]) if isinstance(row[0], str) else dict(row[0])
+            except Exception:
+                base = {}
+        # merge/increment
+        for k, v in (patch or {}).items():
+            if isinstance(v, (int, float)) and isinstance(base.get(k), (int, float)):
+                base[k] = type(base.get(k))(base.get(k, 0) + v)  # preserve type
+            else:
+                base[k] = v
+        cur.execute(
+            "UPDATE market.ingestion_jobs SET summary=%s WHERE job_id=%s",
+            (json.dumps(base, ensure_ascii=False), job_id),
+        )
+
+
+def create_run(conn, params: Dict[str, Any]) -> uuid.UUID:
+    run_id = uuid.uuid4()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO market.ingestion_runs (
+                run_id, mode, dataset, status, created_at, started_at, params
+            ) VALUES (%s, 'full', 'kline_daily_raw', 'running', NOW(), NOW(), %s)
+            """,
+            (run_id, json.dumps(params, ensure_ascii=False)),
+        )
+    return run_id
+
+
+def finish_run(conn, run_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE market.ingestion_runs
+                   SET status=%s, finished_at=NOW(), summary=%s
+                 WHERE run_id=%s""",
+            (status, json.dumps(summary, ensure_ascii=False), run_id),
         )
 
 
@@ -227,27 +279,6 @@ def create_task(
             (task_id, job_id, dataset, ts_code, date_from, date_to),
         )
     return task_id
-
-
-def update_job_summary(conn, job_id: uuid.UUID, patch: Dict[str, Any]) -> None:
-    with conn.cursor() as cur:
-        cur.execute("SELECT summary FROM market.ingestion_jobs WHERE job_id=%s", (job_id,))
-        row = cur.fetchone()
-        base: Dict[str, Any] = {}
-        if row and row[0]:
-            try:
-                base = json.loads(row[0]) if isinstance(row[0], str) else dict(row[0])
-            except Exception:
-                base = {}
-        for k, v in (patch or {}).items():
-            if isinstance(v, (int, float)) and isinstance(base.get(k), (int, float)):
-                base[k] = type(base.get(k))(base.get(k, 0) + v)
-            else:
-                base[k] = v
-        cur.execute(
-            "UPDATE market.ingestion_jobs SET summary=%s WHERE job_id=%s",
-            (json.dumps(base, ensure_ascii=False), job_id),
-        )
 
 
 def complete_task(conn, task_id: uuid.UUID, success: bool, progress: float, last_error: Optional[str]) -> None:
@@ -296,22 +327,11 @@ def upsert_checkpoint(conn, run_id: uuid.UUID, ts_code: str, cursor_date: Option
         cur.execute(
             """
             INSERT INTO market.ingestion_checkpoints (run_id, dataset, ts_code, cursor_date, extra)
-            VALUES (%s, 'kline_daily_qfq', %s, %s, NULL)
+            VALUES (%s, 'kline_daily_raw', %s, %s, NULL)
             ON CONFLICT (run_id, dataset, ts_code)
             DO UPDATE SET cursor_date = EXCLUDED.cursor_date, extra = EXCLUDED.extra
             """,
             (run_id, ts_code, cursor_date),
-        )
-
-
-def log_error(conn, run_id: uuid.UUID, ts_code: Optional[str], message: str, detail: Optional[Dict[str, Any]] = None) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO market.ingestion_errors (run_id, dataset, ts_code, message, detail)
-            VALUES (%s, 'kline_daily_qfq', %s, %s, %s)
-            """,
-            (run_id, ts_code, message, json.dumps(detail, ensure_ascii=False) if detail else None),
         )
 
 
@@ -341,8 +361,12 @@ def main() -> None:
             with conn.cursor() as cur:
                 cur.execute("SET synchronous_commit = off")
                 cur.execute("SET work_mem = '256MB'")
+        if args.truncate:
+            with conn.cursor() as cur:
+                cur.execute("TRUNCATE TABLE market.kline_daily_raw")
+            print("[WARN] TRUNCATE market.kline_daily_raw executed by user request")
         job_params = {
-            "datasets": ["kline_daily_qfq"],
+            "datasets": ["kline_daily_raw"],
             "exchanges": exchanges,
             "start_date": args.start_date,
             "end_date": args.end_date,
@@ -350,19 +374,10 @@ def main() -> None:
         }
         if args.job_id:
             job_id = uuid.UUID(args.job_id)
-            # mark pre-created job as running and attach params
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE market.ingestion_jobs
-                       SET status='running', started_at=NOW(), summary=%s
-                     WHERE job_id=%s
-                    """,
-                    (json.dumps(job_params, ensure_ascii=False), job_id),
-                )
+            start_job(conn, job_id, job_params)
         else:
             job_id = create_job(conn, "init", job_params)
-        log_ingestion(conn, job_id, "info", "start full daily ingestion job")
+        log_ingestion(conn, job_id, "info", "start full daily RAW ingestion job")
 
         params = {
             "exchanges": exchanges,
@@ -376,7 +391,7 @@ def main() -> None:
         try:
             run_id = create_run(conn, params)
             print(f"[INFO] job_id={job_id} run_id={run_id} created, fetching codes...")
-            log_ingestion(conn, job_id, "info", f"run {run_id} start full daily ingestion")
+            log_ingestion(conn, job_id, "info", f"run {run_id} start full daily RAW ingestion")
 
             codes = fetch_codes(exchanges)
             if args.limit_codes is not None:
@@ -396,57 +411,28 @@ def main() -> None:
             }
             update_job_summary(conn, job_id, {"total_codes": stats["total_codes"], "success_codes": 0, "failed_codes": 0, "inserted_rows": 0})
 
-            pbar = None
-            if tqdm is not None:
-                try:
-                    pbar = tqdm(total=len(codes), desc="kline_daily_qfq init", unit="code")
-                except Exception:
-                    pbar = None
             for batch in chunked(codes, args.batch_size):
                 for ts_code in batch:
                     code = ts_code.split(".")[0]
-                    task_id = create_task(conn, job_id, "kline_daily_qfq", ts_code, args.start_date, args.end_date)
+                    task_id = create_task(conn, job_id, "kline_daily_raw", ts_code, args.start_date, args.end_date)
                     try:
-                        bars = fetch_kline_daily(code, args.start_date, args.end_date)
-                        inserted, last_date = upsert_kline_daily(conn, ts_code, bars)
+                        bars = fetch_kline_daily_raw(code, args.start_date, args.end_date)
+                        inserted, last_date = upsert_kline_daily_raw(conn, ts_code, bars)
                         stats["inserted_rows"] += inserted
                         stats["success_codes"] += 1
-                        try:
-                            update_job_summary(conn, job_id, {"inserted_rows": int(inserted), "success_codes": 1})
-                        except Exception:
-                            pass
                         if last_date:
-                            upsert_state(conn, "kline_daily_qfq", ts_code, last_date, None)
+                            upsert_state(conn, "kline_daily_raw", ts_code, last_date, None)
                         upsert_checkpoint(conn, run_id, ts_code, last_date)
                         complete_task(conn, task_id, True, 100.0, None)
+                        update_job_summary(conn, job_id, {"inserted_rows": inserted, "success_codes": 1})
                         print(f"[OK] {ts_code}: inserted={inserted} rows last_date={last_date}")
                         log_ingestion(conn, job_id, "info", f"run {run_id} {ts_code} inserted={inserted} last_date={last_date}")
                     except Exception as exc:  # noqa: BLE001
                         stats["failed_codes"] += 1
-                        try:
-                            update_job_summary(conn, job_id, {"failed_codes": 1})
-                        except Exception:
-                            pass
-                        log_error(
-                            conn,
-                            run_id,
-                            ts_code,
-                            str(exc),
-                            detail={"code": code, "start": args.start_date, "end": args.end_date},
-                        )
+                        update_job_summary(conn, job_id, {"failed_codes": 1})
                         complete_task(conn, task_id, False, 0.0, str(exc))
                         print(f"[WARN] {ts_code} failed: {exc}")
                         log_ingestion(conn, job_id, "error", f"run {run_id} {ts_code} failed: {exc}")
-                    if pbar is not None:
-                        try:
-                            pbar.update(1)
-                        except Exception:
-                            pass
-            if pbar is not None:
-                try:
-                    pbar.close()
-                except Exception:
-                    pass
 
             status = "success" if stats["failed_codes"] == 0 else "failed"
             finish_run(conn, run_id, status, stats)

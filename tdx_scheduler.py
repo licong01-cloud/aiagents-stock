@@ -35,9 +35,13 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import psycopg2
 import psycopg2.extras as pgx
 import schedule
+from dotenv import load_dotenv
 
 pgx.register_uuid()
 
+load_dotenv(override=True)
+# Project root resolved by current file location, to build absolute script paths
+ROOT_DIR = Path(__file__).parent.resolve()
 DEFAULT_DB_CFG = dict(
     host=os.getenv("TDX_DB_HOST", "localhost"),
     port=int(os.getenv("TDX_DB_PORT", "5432")),
@@ -46,11 +50,14 @@ DEFAULT_DB_CFG = dict(
     dbname=os.getenv("TDX_DB_NAME", "aistock"),
 )
 
-DEFAULT_TEST_SCRIPT = Path("scripts/test_tdx_all_api.py")
-DEFAULT_TEST_OUTPUT_DIR = Path("tmp/testing_runs")
-DEFAULT_INGEST_INCREMENTAL = Path("scripts/ingest_incremental.py")
-DEFAULT_INGEST_FULL_DAILY = Path("scripts/ingest_full_daily.py")
-DEFAULT_INGEST_FULL_MINUTE = Path("scripts/ingest_full_minute.py")
+DEFAULT_TEST_SCRIPT = ROOT_DIR / "scripts" / "test_tdx_all_api.py"
+DEFAULT_TEST_OUTPUT_DIR = ROOT_DIR / "tmp" / "testing_runs"
+DEFAULT_INGEST_INCREMENTAL = ROOT_DIR / "scripts" / "ingest_incremental.py"
+DEFAULT_INGEST_FULL_DAILY = ROOT_DIR / "scripts" / "ingest_full_daily.py"
+DEFAULT_INGEST_FULL_MINUTE = ROOT_DIR / "scripts" / "ingest_full_minute.py"
+DEFAULT_INGEST_FULL_DAILY_RAW = ROOT_DIR / "scripts" / "ingest_full_daily_raw.py"
+DEFAULT_ADJUST_REBUILD = ROOT_DIR / "scripts" / "rebuild_adjusted_daily.py"
+DEFAULT_INGEST_TUSHARE_TDX_BOARD = ROOT_DIR / "scripts" / "ingest_tushare_tdx_board.py"
 
 
 def _ensure_directory(path: Path) -> None:
@@ -470,12 +477,19 @@ class TDXScheduler:
     def _default_ingestion_script(dataset: str, mode: str) -> Optional[Path]:
         dataset = (dataset or "").strip().lower()
         mode = (mode or "").strip().lower()
+        # Tushare TDX board datasets must use the dedicated script for both modes
+        if dataset.startswith("tdx_board_") and mode in {"init", "incremental"}:
+            return DEFAULT_INGEST_TUSHARE_TDX_BOARD
         if mode == "incremental":
             return DEFAULT_INGEST_INCREMENTAL
         if mode == "init" and dataset in {"kline_daily_qfq", "kline_daily"}:
             return DEFAULT_INGEST_FULL_DAILY
+        if mode == "init" and dataset in {"kline_daily_raw"}:
+            return DEFAULT_INGEST_FULL_DAILY_RAW
         if mode == "init" and dataset in {"kline_minute_raw", "minute_1m"}:
             return DEFAULT_INGEST_FULL_MINUTE
+        if mode == "rebuild" and dataset in {"adjust_daily", "kline_adjust_daily"}:
+            return DEFAULT_ADJUST_REBUILD
         return None
 
     @staticmethod
@@ -484,19 +498,33 @@ class TDXScheduler:
         dataset = (dataset or "").strip().lower()
         mode = (mode or "").strip().lower()
         if mode == "incremental":
-            target = options.get("datasets") or dataset
-            if target:
-                args += ["--datasets", str(target)]
-            if options.get("date"):
-                args += ["--date", str(options["date"])]
-            if options.get("start_date"):
-                args += ["--start-date", str(options["start_date"])]
-            if options.get("exchanges"):
-                args += ["--exchanges", ",".join(options["exchanges"]) if isinstance(options["exchanges"], (list, tuple)) else str(options["exchanges"])]
-            if options.get("batch_size"):
-                args += ["--batch-size", str(options["batch_size"])]
-            if options.get("max_empty"):
-                args += ["--max-empty", str(options["max_empty"])]
+            # Tushare TDX Board special handling
+            if dataset.startswith("tdx_board_"):
+                args += ["--dataset", dataset, "--mode", "incremental"]
+                if options.get("start_date"):
+                    args += ["--start-date", str(options["start_date"])]
+                if options.get("end_date"):
+                    args += ["--end-date", str(options["end_date"])]
+                if options.get("batch_size"):
+                    args += ["--batch-size", str(options["batch_size"])]
+                if options.get("job_id"):
+                    args += ["--job-id", str(options["job_id"])]
+            else:
+                target = options.get("datasets") or dataset
+                if target:
+                    args += ["--datasets", str(target)]
+                if options.get("date"):
+                    args += ["--date", str(options["date"])]
+                if options.get("start_date"):
+                    args += ["--start-date", str(options["start_date"])]
+                if options.get("exchanges"):
+                    args += ["--exchanges", ",".join(options["exchanges"]) if isinstance(options["exchanges"], (list, tuple)) else str(options["exchanges"])]
+                if options.get("batch_size"):
+                    args += ["--batch-size", str(options["batch_size"])]
+                if options.get("max_empty"):
+                    args += ["--max-empty", str(options["max_empty"])]
+                if options.get("job_id"):
+                    args += ["--job-id", str(options["job_id"])]
         elif mode == "init":
             if dataset in {"kline_daily_qfq", "kline_daily"}:
                 if options.get("exchanges"):
@@ -509,7 +537,9 @@ class TDXScheduler:
                     args += ["--batch-size", str(options["batch_size"])]
                 if options.get("limit_codes"):
                     args += ["--limit-codes", str(options["limit_codes"])]
-            elif dataset in {"kline_minute_raw", "minute_1m"}:
+                if options.get("job_id"):
+                    args += ["--job-id", str(options["job_id"])]
+            elif dataset in {"kline_daily_raw"}:
                 if options.get("exchanges"):
                     args += ["--exchanges", ",".join(options["exchanges"]) if isinstance(options["exchanges"], (list, tuple)) else str(options["exchanges"])]
                 if options.get("start_date"):
@@ -520,6 +550,39 @@ class TDXScheduler:
                     args += ["--batch-size", str(options["batch_size"])]
                 if options.get("limit_codes"):
                     args += ["--limit-codes", str(options["limit_codes"])]
+                if options.get("truncate"):
+                    args += ["--truncate"]
+                if options.get("job_id"):
+                    args += ["--job-id", str(options["job_id"])]
+            elif dataset.startswith("tdx_board_"):
+                args += ["--dataset", dataset, "--mode", "init"]
+                if options.get("start_date"):
+                    args += ["--start-date", str(options["start_date"])]
+                if options.get("end_date"):
+                    args += ["--end-date", str(options["end_date"])]
+                if options.get("batch_size"):
+                    args += ["--batch-size", str(options["batch_size"])]
+                if options.get("job_id"):
+                    args += ["--job-id", str(options["job_id"])]
+        elif mode == "rebuild" and dataset in {"adjust_daily", "kline_adjust_daily"}:
+            which = options.get("which") or "both"
+            args += ["--which", str(which)]
+            if options.get("exchanges"):
+                args += ["--exchanges", ",".join(options["exchanges"]) if isinstance(options["exchanges"], (list, tuple)) else str(options["exchanges"])]
+            if options.get("start_date"):
+                args += ["--start-date", str(options["start_date"])]
+            if options.get("end_date"):
+                args += ["--end-date", str(options["end_date"])]
+            if options.get("batch_size"):
+                args += ["--batch-size", str(options["batch_size"])]
+            if options.get("truncate"):
+                args += ["--truncate"]
+            if options.get("job_id"):
+                args += ["--job-id", str(options["job_id"])]
+        # Append session-level bulk tuning flag by default unless explicitly disabled
+        use_bulk = options.get("bulk_session_tune")
+        if use_bulk is None or bool(use_bulk):
+            args.append("--bulk-session-tune")
         return args
 
     # ------------------------------------------------------------------
@@ -586,6 +649,33 @@ class TDXScheduler:
         start_ts = _now()
         log_lines: List[str] = []
         try:
+            job_uuid = self._extract_job_id_from_cmd(cmd)
+            if job_uuid is not None:
+                sql = (
+                    """
+                    UPDATE market.ingestion_jobs
+                       SET status='running', started_at=COALESCE(started_at, %s)
+                     WHERE job_id=%s AND status='queued'
+                    """
+                )
+                self._execute(sql, (start_ts, job_uuid))
+                # Log a 'starting' message so UI can show immediate feedback
+                try:
+                    self._log_ingestion_run(
+                        job_uuid,
+                        schedule_id,
+                        triggered_by,
+                        start_ts,
+                        "starting",
+                        {"dataset": dataset, "mode": mode},
+                        {"command": cmd},
+                        log_lines,
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
             proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
             log_lines.append(proc.stdout)
             log_lines.append(proc.stderr)
@@ -594,12 +684,19 @@ class TDXScheduler:
             detail = {"command": cmd}
             if schedule_id:
                 self._update_ingestion_schedule(schedule_id, last_run=start_ts, last_status=status, last_error=None)
-            self._log_ingestion_run(run_id, schedule_id, triggered_by, start_ts, status, summary, detail, log_lines)
+            job_uuid = self._extract_job_id_from_cmd(cmd)
+            log_job_id = job_uuid or run_id
+            self._log_ingestion_run(log_job_id, schedule_id, triggered_by, start_ts, status, summary, detail, log_lines)
+            if status != "success" and job_uuid is not None:
+                # Ensure the job row is finalized as failed when the script exits non-zero before updating DB itself
+                self._update_ingestion_job_status(job_uuid, status, start_ts, summary)
         except Exception as exc:  # noqa: BLE001
             if schedule_id:
                 self._update_ingestion_schedule(schedule_id, last_run=start_ts, last_status="failed", last_error=str(exc))
+            job_uuid = self._extract_job_id_from_cmd(cmd)
+            log_job_id = job_uuid or run_id
             self._log_ingestion_run(
-                run_id,
+                log_job_id,
                 schedule_id,
                 triggered_by,
                 start_ts,
@@ -609,6 +706,8 @@ class TDXScheduler:
                 log_lines,
                 error=str(exc),
             )
+            if job_uuid is not None:
+                self._update_ingestion_job_status(job_uuid, "failed", start_ts, {"dataset": dataset, "mode": mode, "error": str(exc)})
 
     # ------------------------------------------------------------------
     # DB write helpers
@@ -706,6 +805,29 @@ class TDXScheduler:
         values.append(schedule_id)
         sql = f"UPDATE market.ingestion_schedules SET {', '.join(sets)} WHERE schedule_id=%s"
         self._execute(sql, tuple(values))
+
+    @staticmethod
+    def _extract_job_id_from_cmd(cmd: List[str]) -> Optional[uuid.UUID]:
+        for i, tok in enumerate(cmd):
+            if tok == "--job-id" and i + 1 < len(cmd):
+                try:
+                    return _make_uuid(cmd[i + 1])
+                except Exception:  # noqa: BLE001
+                    return None
+        return None
+
+    def _update_ingestion_job_status(
+        self, job_id: uuid.UUID, status: str, start_ts: dt.datetime, summary: Dict[str, Any]
+    ) -> None:
+        sql = """
+            UPDATE market.ingestion_jobs
+               SET status=%s,
+                   started_at=COALESCE(started_at, %s),
+                   finished_at=NOW(),
+                   summary=%s
+             WHERE job_id=%s
+        """
+        self._execute(sql, (status, start_ts, _json_dump(summary), job_id))
 
     def _log_ingestion_run(
         self,

@@ -26,8 +26,7 @@ def main():
     ddl: List[str] = [
         "CREATE EXTENSION IF NOT EXISTS timescaledb",
         "CREATE SCHEMA IF NOT EXISTS app",
-        # ensure clean slate for first run if a prior attempt created a non-compliant table
-        "DROP TABLE IF EXISTS app.analysis_records CASCADE",
+        # keep existing data; do not drop analysis_records
         # monitored_stocks (regular)
         """
         CREATE TABLE IF NOT EXISTS app.monitored_stocks (
@@ -62,6 +61,40 @@ def main():
         """,
         "SELECT create_hypertable('app.price_history', 'timestamp', if_not_exists => TRUE)",
         "CREATE INDEX IF NOT EXISTS idx_ph_stock_time ON app.price_history (stock_id, timestamp DESC)",
+        # portfolio_stocks (regular)
+        """
+        CREATE TABLE IF NOT EXISTS app.portfolio_stocks (
+          id            BIGSERIAL PRIMARY KEY,
+          code          TEXT NOT NULL UNIQUE,
+          name          TEXT NOT NULL,
+          cost_price    NUMERIC,
+          quantity      INT,
+          note          TEXT,
+          auto_monitor  BOOLEAN DEFAULT TRUE,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """,
+        # portfolio_analysis_history (hypertable on analysis_time)
+        """
+        CREATE TABLE IF NOT EXISTS app.portfolio_analysis_history (
+          id                 BIGSERIAL NOT NULL,
+          portfolio_stock_id BIGINT NOT NULL,
+          analysis_time      TIMESTAMPTZ NOT NULL DEFAULT now(),
+          rating             TEXT,
+          confidence         NUMERIC,
+          current_price      NUMERIC,
+          target_price       NUMERIC,
+          entry_min          NUMERIC,
+          entry_max          NUMERIC,
+          take_profit        NUMERIC,
+          stop_loss          NUMERIC,
+          summary            TEXT,
+          PRIMARY KEY (id, analysis_time)
+        )
+        """,
+        "SELECT create_hypertable('app.portfolio_analysis_history', 'analysis_time', if_not_exists => TRUE)",
+        "CREATE INDEX IF NOT EXISTS idx_pah_stock_time ON app.portfolio_analysis_history (portfolio_stock_id, analysis_time DESC)",
         # analysis_records
         """
         CREATE TABLE IF NOT EXISTS app.analysis_records (
@@ -268,6 +301,42 @@ def main():
         """,
         "SELECT create_hypertable('app.longhubang', 'created_at', if_not_exists => TRUE)",
         "CREATE INDEX IF NOT EXISTS idx_lhb_code_date ON app.longhubang (ts_code, trade_date DESC)",
+        # watchlist categories (remain the same)
+        """
+        CREATE TABLE IF NOT EXISTS app.watchlist_categories (
+          id          BIGSERIAL PRIMARY KEY,
+          name        TEXT NOT NULL UNIQUE,
+          description TEXT,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """,
+        # watchlist items (many-to-many; no category_id column)
+        """
+        CREATE TABLE IF NOT EXISTS app.watchlist_items (
+          id           BIGSERIAL PRIMARY KEY,
+          code         TEXT NOT NULL UNIQUE,
+          name         TEXT NOT NULL,
+          note         TEXT,
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_wi_code ON app.watchlist_items (code)",
+        # watchlist item-category mapping (join table)
+        """
+        CREATE TABLE IF NOT EXISTS app.watchlist_item_categories (
+          item_id     BIGINT NOT NULL REFERENCES app.watchlist_items(id) ON DELETE CASCADE,
+          category_id BIGINT NOT NULL REFERENCES app.watchlist_categories(id) ON DELETE CASCADE,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (item_id, category_id)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_wic_item ON app.watchlist_item_categories (item_id)",
+        "CREATE INDEX IF NOT EXISTS idx_wic_cat ON app.watchlist_item_categories (category_id)",
+        # ensure default categories exist
+        "INSERT INTO app.watchlist_categories(name, description) VALUES ('默认', '默认分类') ON CONFLICT (name) DO NOTHING",
+        "INSERT INTO app.watchlist_categories(name, description) VALUES ('持仓股票', '持仓自动归类') ON CONFLICT (name) DO NOTHING",
     ]
 
     params = _conn_params()

@@ -1,9 +1,8 @@
 from __future__ import annotations
-
-"""Streamlit UI components for managing TDX testing & ingestion scheduling."""
-
 import os
+import time
 from datetime import datetime, timezone
+import datetime as dt
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +12,119 @@ import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
+
+def _render_init_tab() -> None:
+    st.subheader("🚀 初始化同步")
+    # 数据源选择放在表单之外，切换时触发重绘
+    ds_source = st.selectbox("数据源", options=["TDX", "Tushare"], index=0, key="init_src")
+    with st.form("init_form"):
+        if ds_source == "TDX":
+            dataset_labels = {
+                "kline_daily_raw": "日线（未复权 RAW）",
+                "kline_minute_raw": "1 分钟（原始 RAW）",
+            }
+        else:
+            dataset_labels = {
+                "tdx_board_all": "通达信板块（信息+成分+行情）",
+                "tdx_board_index": "通达信板块信息",
+                "tdx_board_member": "通达信板块成分",
+                "tdx_board_daily": "通达信板块行情",
+                "tushare_trade_cal": "交易日历（Tushare trade_cal 同步）",
+            }
+        dataset = st.selectbox(
+            "目标数据集",
+            options=list(dataset_labels.keys()),
+            format_func=lambda k: f"{k} · {dataset_labels[k]}",
+            key=f"init_dataset_{ds_source}"
+        )
+        col1, col2 = st.columns(2)
+        with col1:
+            if ds_source == "TDX":
+                start_date = st.text_input("开始日期", value="1990-01-01")
+            else:
+                start_date = st.text_input("开始日期", value=(dt.date.today() - dt.timedelta(days=365)).isoformat())
+        with col2:
+            end_date = st.text_input("结束日期", value=dt.date.today().isoformat())
+        exchanges = st.text_input("交易所(逗号分隔)", value="sh,sz,bj") if ds_source == "TDX" else ""
+        # Tushare 日历专用参数
+        cal_exchange = None
+        if ds_source == "Tushare" and dataset == "tushare_trade_cal":
+            cal_exchange = st.selectbox("交易所(用于Tushare日历)", options=["SSE", "SZSE"], index=0, key="init_cal_exch")
+        truncate = st.checkbox("初始化前清空目标表(或目标范围)", value=True) if ds_source == "TDX" else False
+        confirm = st.checkbox("我已知晓清空数据的风险，并确认继续") if ds_source == "TDX" else True
+        submitted = st.form_submit_button("开始初始化", type="primary")
+        if submitted:
+            if ds_source == "TDX" and truncate and not confirm:
+                st.warning("请先勾选确认或取消清空选项后再继续")
+            else:
+                try:
+                    if ds_source == "TDX":
+                        opts: Dict[str, Any] = {
+                            "exchanges": [s.strip() for s in exchanges.split(",") if s.strip()],
+                            "start_date": start_date,
+                            "end_date": end_date,
+                            "batch_size": 100,
+                            "truncate": bool(truncate),
+                        }
+                        payload = {"dataset": dataset, "options": opts}
+                        resp = _backend_request("POST", "/api/ingestion/init", json=payload)
+                    else:
+                        if dataset == "tushare_trade_cal":
+                            # 交易日历同步
+                            payload = {"start_date": start_date, "end_date": end_date, "exchange": cal_exchange or "SSE"}
+                            resp = _backend_request("POST", "/api/calendar/sync", json=payload)
+                            st.success(f"已同步：{int(resp.get('inserted_or_updated') or 0)} 条")
+                        else:
+                            opts = {
+                                "start_date": start_date,
+                                "end_date": end_date,
+                                "batch_size": 200,
+                            }
+                            payload = {"dataset": dataset, "mode": "init", "options": opts}
+                            resp = _backend_request("POST", "/api/ingestion/run", json=payload)
+                            st.session_state["init_job_id"] = resp.get("job_id")
+                            st.session_state["init_auto_refresh"] = True
+                            st.success("初始化任务已提交")
+                            st.rerun()
+                except Exception as exc:  # noqa: BLE001
+                    _render_backend_error(exc)
+
+    job_id = st.session_state.get("init_job_id")
+    if job_id:
+        st.markdown(f"当前作业ID：`{job_id}`")
+        try:
+            job = _backend_request("GET", f"/api/ingestion/job/{job_id}")
+            percent = int(job.get("progress") or 0)
+            counters = job.get("counters") or {}
+            colp, colt = st.columns([3, 1])
+            with colp:
+                st.progress(percent / 100.0, text=f"进度 {percent}% · 完成 {counters.get('done', 0)}/{counters.get('total', 0)} · 新增 {counters.get('inserted_rows', 0)} 条")
+                st.caption(
+                    f"总数 {counters.get('total', 0)} · 已完成 {counters.get('done', 0)} · 运行中 {counters.get('running', 0)} · 排队 {counters.get('pending', 0)} · 成功 {counters.get('success', 0)} · 失败 {counters.get('failed', 0)}"
+                )
+                logs = job.get("logs") or []
+                if logs:
+                    st.markdown("最近日志：")
+                    for m in logs:
+                        st.code(str(m))
+            with colt:
+                auto = st.checkbox("自动刷新", value=st.session_state.get("init_auto_refresh", True), key="init_auto_refresh")
+            st.write(job)
+            status = (job.get("status") or "").lower()
+            if status in {"success", "failed", "canceled"}:
+                if status == "success":
+                    st.success("初始化完成")
+                else:
+                    st.error(f"初始化结束，状态：{status}")
+                st.session_state.pop("init_job_id", None)
+            else:
+                if auto:
+                    time.sleep(5)
+                    st.rerun()
+        except Exception as exc:  # noqa: BLE001
+            _render_backend_error(exc)
+
+"""Streamlit UI components for managing TDX testing & ingestion scheduling."""
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 
@@ -29,11 +141,15 @@ FREQUENCY_CHOICES: List[tuple[str, str]] = [
 INGESTION_DATASETS: Dict[str, str] = {
     "kline_daily_qfq": "日线（前复权）",
     "kline_minute_raw": "1 分钟原始",
+    "tdx_board_all": "通达信板块（信息+成分+行情）",
+    "tdx_board_index": "通达信板块信息",
+    "tdx_board_member": "通达信板块成分",
+    "tdx_board_daily": "通达信板块行情",
 }
 
 
 def _backend_request(method: str, path: str, **kwargs) -> Dict[str, Any]:
-    base = os.getenv("TDX_BACKEND_BASE", "http://localhost:8080").rstrip("/")
+    base = os.getenv("TDX_BACKEND_BASE", "http://localhost:9000").rstrip("/")
     url = base + path
     timeout = kwargs.pop("timeout", 30)
     resp = requests.request(method, url, timeout=timeout, **kwargs)
@@ -72,6 +188,8 @@ def _render_backend_error(exc: Exception) -> None:
         st.error("后端请求超时，请稍后重试或检查网络。")
     else:
         st.error(f"后端请求失败: {exc}")
+    # 展示详细异常堆栈，避免页面空白
+    st.exception(exc)
 
 
 def _render_testing_runs(runs: List[Dict[str, Any]]) -> None:
@@ -96,6 +214,182 @@ def _render_testing_runs(runs: List[Dict[str, Any]]) -> None:
     st.dataframe(df, use_container_width=True)
 
 
+def _render_incremental_tab() -> None:
+    st.subheader("🔄 增量更新")
+    # 数据源选择放在表单之外，切换时触发重绘
+    ds_source = st.selectbox("数据源", options=["TDX", "Tushare"], index=0, key="incr_src")
+    with st.form("incremental_form"):
+        if ds_source == "TDX":
+            dataset_labels = {
+                "kline_daily_qfq": "日线（前复权 QFQ）",
+                "kline_minute_raw": "1 分钟（原始 RAW）",
+            }
+        else:
+            dataset_labels = {
+                "tdx_board_all": "通达信板块（信息+成分+行情）",
+                "tdx_board_index": "通达信板块信息",
+                "tdx_board_member": "通达信板块成分",
+                "tdx_board_daily": "通达信板块行情",
+                "tushare_trade_cal": "交易日历（Tushare trade_cal 同步）",
+            }
+        dataset = st.selectbox(
+            "目标数据集",
+            options=list(dataset_labels.keys()),
+            format_func=lambda k: f"{k} · {dataset_labels[k]}",
+            key=f"incr_dataset_{ds_source}"
+        )
+        col1, col2 = st.columns(2)
+        with col1:
+            date = st.text_input("目标日期", value=dt.date.today().isoformat())
+        with col2:
+            start_date = st.text_input("覆盖起始日期(可选)", value="")
+        exchanges = st.text_input("交易所(逗号分隔)", value="sh,sz,bj") if ds_source == "TDX" else ""
+        # Tushare 日历专用参数
+        incr_cal_start = incr_cal_end = None
+        incr_cal_exchange = None
+        if ds_source == "Tushare" and dataset == "tushare_trade_cal":
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                incr_cal_start = st.text_input("开始日期", value=(dt.date.today() - dt.timedelta(days=365)).isoformat(), key="incr_cal_start")
+            with cc2:
+                incr_cal_end = st.text_input("结束日期", value=dt.date.today().isoformat(), key="incr_cal_end")
+            incr_cal_exchange = st.selectbox("交易所(用于Tushare日历)", options=["SSE", "SZSE"], index=0, key="incr_cal_exch")
+        batch_size = st.number_input("批大小", min_value=10, max_value=2000, value=100, step=10)
+        submitted = st.form_submit_button("开始增量", type="primary")
+        if submitted:
+            try:
+                if ds_source == "TDX":
+                    opts: Dict[str, Any] = {
+                        "date": date,
+                        "start_date": (start_date or None),
+                        "exchanges": [s.strip() for s in exchanges.split(",") if s.strip()],
+                        "batch_size": int(batch_size),
+                    }
+                    payload = {"dataset": dataset, "mode": "incremental", "options": opts}
+                    resp = _backend_request("POST", "/api/ingestion/run", json=payload)
+                else:
+                    if dataset == "tushare_trade_cal":
+                        payload = {"start_date": incr_cal_start, "end_date": incr_cal_end, "exchange": incr_cal_exchange or "SSE"}
+                        resp = _backend_request("POST", "/api/calendar/sync", json=payload)
+                        st.success(f"已同步：{int(resp.get('inserted_or_updated') or 0)} 条")
+                    else:
+                        opts = {
+                            "start_date": (start_date or None),
+                            "end_date": date,
+                            "batch_size": int(batch_size),
+                        }
+                        payload = {"dataset": dataset, "mode": "incremental", "options": opts}
+                        resp = _backend_request("POST", "/api/ingestion/run", json=payload)
+                        st.session_state["incr_job_id"] = resp.get("job_id")
+                        st.session_state["incr_auto_refresh"] = True
+                        st.success("增量任务已提交")
+                        st.rerun()
+            except Exception as exc:  # noqa: BLE001
+                _render_backend_error(exc)
+
+    job_id = st.session_state.get("incr_job_id")
+    if job_id:
+        st.markdown(f"当前作业ID：`{job_id}`")
+        try:
+            job = _backend_request("GET", f"/api/ingestion/job/{job_id}")
+            percent = int(job.get("progress") or 0)
+            counters = job.get("counters") or {}
+            colp, colt = st.columns([3, 1])
+            with colp:
+                st.progress(percent / 100.0, text=f"进度 {percent}% · 完成 {counters.get('done', 0)}/{counters.get('total', 0)} · 新增 {counters.get('inserted_rows', 0)} 条")
+                st.caption(
+                    f"总数 {counters.get('total', 0)} · 已完成 {counters.get('done', 0)} · 运行中 {counters.get('running', 0)} · 排队 {counters.get('pending', 0)} · 成功 {counters.get('success', 0)} · 失败 {counters.get('failed', 0)}"
+                )
+                logs = job.get("logs") or []
+                if logs:
+                    st.markdown("最近日志：")
+                    for m in logs:
+                        st.code(str(m))
+            with colt:
+                auto = st.checkbox("自动刷新", value=st.session_state.get("incr_auto_refresh", True), key="incr_auto_refresh")
+            status = (job.get("status") or "").lower()
+            if status in {"success", "failed", "canceled"}:
+                if status == "success":
+                    st.success("增量更新完成")
+                else:
+                    st.error(f"增量结束，状态：{status}")
+                st.session_state.pop("incr_job_id", None)
+            else:
+                if auto:
+                    time.sleep(5)
+                    st.rerun()
+        except Exception as exc:  # noqa: BLE001
+            _render_backend_error(exc)
+
+
+def _render_adjust_tab() -> None:
+    st.subheader("🛠️ 复权生成（RAW → QFQ/HFQ）")
+    with st.form("adjust_rebuild_form"):
+        which = st.selectbox("生成类型", options=["both", "qfq", "hfq"], format_func=lambda x: {"both": "QFQ+HFQ", "qfq": "仅QFQ", "hfq": "仅HFQ"}[x])
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.text_input("开始日期", value="1990-01-01")
+        with col2:
+            end_date = st.text_input("结束日期", value=dt.date.today().isoformat())
+        exchanges = st.text_input("交易所(逗号分隔)", value="sh,sz,bj")
+        truncate = st.checkbox("生成前清理目标表/范围", value=False)
+        confirm = st.checkbox("我已知晓清理数据的风险，并确认继续")
+        submitted = st.form_submit_button("开始生成", type="primary")
+        if submitted:
+            if truncate and not confirm:
+                st.warning("请先勾选确认或取消清理选项后再继续")
+            else:
+                try:
+                    opts: Dict[str, Any] = {
+                        "which": which,
+                        "start_date": start_date,
+                        "end_date": end_date,
+                        "exchanges": [s.strip() for s in exchanges.split(",") if s.strip()],
+                        "truncate": bool(truncate),
+                    }
+                    resp = _backend_request("POST", "/api/adjust/rebuild", json={"options": opts})
+                    st.session_state["adjust_job_id"] = resp.get("job_id")
+                    st.session_state["adjust_auto_refresh"] = True
+                    st.success("复权生成任务已提交")
+                    st.rerun()
+                except Exception as exc:  # noqa: BLE001
+                    _render_backend_error(exc)
+
+    job_id = st.session_state.get("adjust_job_id")
+    if job_id:
+        st.markdown(f"当前作业ID：`{job_id}`")
+        try:
+            job = _backend_request("GET", f"/api/ingestion/job/{job_id}")
+            percent = int(job.get("progress") or 0)
+            counters = job.get("counters") or {}
+            colp, colt = st.columns([3, 1])
+            with colp:
+                st.progress(percent / 100.0, text=f"进度 {percent}% · 完成 {counters.get('done', 0)}/{counters.get('total', 0)} · 新增 {counters.get('inserted_rows', 0)} 条")
+                st.caption(
+                    f"总数 {counters.get('total', 0)} · 已完成 {counters.get('done', 0)} · 运行中 {counters.get('running', 0)} · 排队 {counters.get('pending', 0)} · 成功 {counters.get('success', 0)} · 失败 {counters.get('failed', 0)}"
+                )
+                logs = job.get("logs") or []
+                if logs:
+                    st.markdown("最近日志：")
+                    for m in logs:
+                        st.code(str(m))
+            with colt:
+                auto = st.checkbox("自动刷新", value=st.session_state.get("adjust_auto_refresh", True), key="adjust_auto_refresh")
+            status = (job.get("status") or "").lower()
+            if status in {"success", "failed", "canceled"}:
+                if status == "success":
+                    st.success("复权生成完成")
+                else:
+                    st.error(f"复权生成结束，状态：{status}")
+                st.session_state.pop("adjust_job_id", None)
+            else:
+                if auto:
+                    time.sleep(5)
+                    st.rerun()
+        except Exception as exc:  # noqa: BLE001
+            _render_backend_error(exc)
+
+
 def _render_ingestion_logs(logs: List[Dict[str, Any]]) -> None:
     if not logs:
         st.info("暂无入库日志")
@@ -117,6 +411,63 @@ def _render_ingestion_logs(logs: List[Dict[str, Any]]) -> None:
     st.dataframe(df, use_container_width=True)
 
 
+def _render_task_monitor() -> None:
+    st.subheader("📊 任务监视器")
+    cols = st.columns([1, 1, 1])
+    with cols[0]:
+        active_only = st.checkbox("仅显示运行中/排队", value=True, key="monitor_active_only")
+    with cols[1]:
+        limit = st.number_input("最多显示", min_value=10, max_value=200, value=50, step=10, key="monitor_limit")
+    with cols[2]:
+        auto = st.checkbox("自动刷新", value=st.session_state.get("monitor_auto", True), key="monitor_auto")
+    try:
+        with st.spinner("正在加载任务..."):
+            payload = _backend_request(
+                "GET",
+                "/api/ingestion/jobs",
+                params={"limit": int(limit), "active_only": bool(active_only)},
+                timeout=8,
+            )
+            items = payload.get("items", [])
+    except Exception as exc:  # noqa: BLE001
+        _render_backend_error(exc)
+        return
+    if not items:
+        st.info("暂无任务")
+        return
+    any_active = False
+    for job in items:
+        summary = job.get("summary") or {}
+        dataset = summary.get("dataset") or (summary.get("datasets") or [None])[0]
+        mode = (summary.get("mode") or job.get("job_type") or "").lower()
+        cat = "其他"
+        ds = (dataset or "").lower() if isinstance(dataset, str) else str(dataset)
+        if ds in {"kline_daily_qfq", "kline_daily", "kline_daily_raw"} and mode == "init":
+            cat = "日线初始化"
+        elif ds in {"kline_daily_qfq", "kline_daily", "kline_daily_raw"} and mode == "incremental":
+            cat = "日线增量"
+        elif ds == "adjust_daily" and mode in {"rebuild", "init"}:
+            cat = "复权计算"
+        elif ds.startswith("tdx_board_"):
+            cat = "板块数据"
+        percent = int(job.get("progress") or 0)
+        counters = job.get("counters") or {}
+        status = (job.get("status") or "").lower()
+        if status in {"running", "queued", "pending"}:
+            any_active = True
+        with st.expander(f"{cat} · 数据集: {dataset or '—'} · 模式: {summary.get('mode') or job.get('job_type') or '—'} · 状态: {job.get('status') or '—'}", expanded=False):
+            st.caption(f"开始时间：{_iso(job.get('started_at'))} · 创建时间：{_iso(job.get('created_at'))}")
+            st.progress(percent / 100.0, text=f"进度 {percent}% · 完成 {counters.get('done', 0)}/{counters.get('total', 0)} · 新增 {counters.get('inserted_rows', 0)} 条")
+            st.caption(
+                f"总数 {counters.get('total', 0)} · 已完成 {counters.get('done', 0)} · 运行中 {counters.get('running', 0)} · 排队 {counters.get('pending', 0)} · 成功 {counters.get('success', 0)} · 失败 {counters.get('failed', 0)}"
+            )
+
+
+    if auto and any_active:
+        time.sleep(5)
+        st.rerun()
+
+
 def _render_testing_tab() -> None:
     st.subheader("🧪 TDX 接口自动化测试")
     col_run, col_refresh = st.columns([1, 1])
@@ -133,8 +484,9 @@ def _render_testing_tab() -> None:
             st.rerun()
 
     try:
-        schedules_payload = _backend_request("GET", "/api/testing/schedule")
-        runs_payload = _backend_request("GET", "/api/testing/runs", params={"limit": 50})
+        with st.spinner("正在加载测试调度与历史..."):
+            schedules_payload = _backend_request("GET", "/api/testing/schedule", timeout=8)
+            runs_payload = _backend_request("GET", "/api/testing/runs", params={"limit": 50}, timeout=8)
     except Exception as exc:  # noqa: BLE001
         _render_backend_error(exc)
         return
@@ -224,6 +576,15 @@ def _render_testing_tab() -> None:
 
 def _render_ingestion_tab() -> None:
     st.subheader("📥 数据入库调度")
+    cols_tools = st.columns([1, 3])
+    with cols_tools[0]:
+        if st.button("创建默认调度", key="create_default_ingestion_schedules"):
+            try:
+                _backend_request("POST", "/api/ingestion/schedule/defaults", json={})
+                st.success("默认调度已创建/更新")
+                st.rerun()
+            except Exception as exc:  # noqa: BLE001
+                _render_backend_error(exc)
     with st.form("ingestion_manual_form"):
         st.markdown("#### 手动执行入库任务")
         dataset = st.selectbox(
@@ -247,7 +608,8 @@ def _render_ingestion_tab() -> None:
                 _render_backend_error(exc)
 
     try:
-        schedules_payload = _backend_request("GET", "/api/ingestion/schedule")
+        with st.spinner("正在加载入库调度..."):
+            schedules_payload = _backend_request("GET", "/api/ingestion/schedule", timeout=8)
     except Exception as exc:  # noqa: BLE001
         _render_backend_error(exc)
         return
@@ -356,8 +718,9 @@ def _render_logs_tab() -> None:
         if st.button("刷新日志", key="refresh_logs"):
             st.rerun()
     try:
-        testing_runs = _backend_request("GET", "/api/testing/runs", params={"limit": 30})
-        ingestion_logs = _backend_request("GET", "/api/ingestion/logs", params={"limit": int(logs_limit)})
+        with st.spinner("正在加载日志..."):
+            testing_runs = _backend_request("GET", "/api/testing/runs", params={"limit": 30}, timeout=8)
+            ingestion_logs = _backend_request("GET", "/api/ingestion/logs", params={"limit": int(logs_limit)}, timeout=8)
     except Exception as exc:  # noqa: BLE001
         _render_backend_error(exc)
         return
@@ -369,11 +732,29 @@ def _render_logs_tab() -> None:
     _render_ingestion_logs(ingestion_logs.get("items", []))
 
 
+def _render_calendar_tab() -> None:
+    st.subheader("📅 交易日历管理（Tushare trade_cal）")
+    st.caption("从 Tushare 接口同步交易日历，支持手动选择起止日期。后端兜底：如表空缺，将在运行时自动拉取近60天补齐。")
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        start_date = st.date_input("开始日期", value=dt.date.today() - dt.timedelta(days=365))
+    with col2:
+        end_date = st.date_input("结束日期", value=dt.date.today())
+    with col3:
+        exchange = st.selectbox("交易所", options=["SSE", "SZSE"], index=0)
+    if st.button("同步交易日历", type="primary"):
+        try:
+            payload = {"start_date": start_date.isoformat(), "end_date": end_date.isoformat(), "exchange": exchange}
+            resp = _backend_request("POST", "/api/calendar/sync", json=payload)
+            st.success(f"已同步：{int(resp.get('inserted_or_updated') or 0)} 条")
+        except Exception as exc:  # noqa: BLE001
+            _render_backend_error(exc)
+
 def show_local_data_management() -> None:
     """Render the Local Data Management dashboard."""
     st.title("🗄️ 本地数据管理")
     st.caption("集中管理 TDX 接口测试与数据入库调度，支持手动与自动执行。")
-    backend_base = os.getenv("TDX_BACKEND_BASE", "http://localhost:8080")
+    backend_base = os.getenv("TDX_BACKEND_BASE", "http://localhost:9000")
     st.info(f"当前调度后端地址：{backend_base}")
 
     test_col1, test_col2 = st.columns([1, 3])
@@ -385,12 +766,26 @@ def show_local_data_management() -> None:
             except Exception as exc:  # noqa: BLE001
                 _render_backend_error(exc)
     with test_col2:
-        st.caption("提示：服务启动命令 `uvicorn tdx_backend:app --host 0.0.0.0 --port 8080`")
+        st.caption("提示：服务启动命令 `uvicorn tdx_backend:app --host 0.0.0.0 --port 9000`")
 
-    tabs = st.tabs(["数据源测试", "数据入库调度", "运行日志"])
-    with tabs[0]:
+    tab = st.radio(
+        "选择功能",
+        ["初始化", "增量", "复权生成", "任务监视器", "数据源测试", "数据入库调度", "运行日志"],
+        horizontal=True,
+        key="local_data_tab",
+    )
+
+    if tab == "初始化":
+        _render_init_tab()
+    elif tab == "增量":
+        _render_incremental_tab()
+    elif tab == "复权生成":
+        _render_adjust_tab()
+    elif tab == "任务监视器":
+        _render_task_monitor()
+    elif tab == "数据源测试":
         _render_testing_tab()
-    with tabs[1]:
+    elif tab == "数据入库调度":
         _render_ingestion_tab()
-    with tabs[2]:
+    elif tab == "运行日志":
         _render_logs_tab()

@@ -413,44 +413,55 @@ class DataSourceManager:
 
     def get_realtime_quotes(self, symbol):
         """
-        获取实时行情数据（优先tushare，失败时使用akshare）
-        
+        获取实时行情数据（优先TDX；TDX缺失则：股票走tushare daily，ETF走tushare fund_daily；再兜底akshare）。
         Args:
-            symbol: 股票代码
-            
+            symbol: 6位代码或带后缀ts_code
         Returns:
             dict: 实时行情数据
         """
+        # 统一基码/后缀
+        base_code = self._convert_from_ts_code(symbol) if '.' in str(symbol) else str(symbol).strip()
         # 优先使用TDX API
-        tdx_result = self._get_tdx_quote(symbol)
+        tdx_result = self._get_tdx_quote(base_code)
         if tdx_result:
             return tdx_result
 
         quotes = {}
+        is_etf = self._looks_like_etf_code(base_code)
 
-        # 优先使用 tushare
+        # 优先使用 tushare（按证券类型选择接口）
         if self.tushare_available:
             try:
+                ts_code = self._convert_to_ts_code(base_code)
                 with network_optimizer.apply():
-                    print(f"[Tushare] 正在获取 {symbol} 的实时行情...")
-                    ts_code = self._convert_to_ts_code(symbol)
-                    df = self.tushare_api.daily(
-                        ts_code=ts_code,
-                        start_date=datetime.now().strftime('%Y%m%d'),
-                        end_date=datetime.now().strftime('%Y%m%d')
-                    )
+                    print(f"[Tushare] 正在获取 {base_code} 的实时行情...")
+                    today = datetime.now().strftime('%Y%m%d')
+                    if is_etf:
+                        # ETF用 fund_daily 接口
+                        df = self.tushare_api.fund_daily(ts_code=ts_code, start_date=today, end_date=today)
+                    else:
+                        df = self.tushare_api.daily(ts_code=ts_code, start_date=today, end_date=today)
                 if df is not None and not df.empty:
                     row = df.iloc[0]
+                    # 字段对齐（fund_daily 与 daily 命名基本一致）
+                    pre_close = row.get('pre_close')
+                    price = row.get('close')
+                    pct_chg = row.get('pct_chg')
+                    if pct_chg is None and pre_close not in (None, 0):
+                        try:
+                            pct_chg = (float(price) - float(pre_close)) / float(pre_close) * 100
+                        except Exception:
+                            pct_chg = None
                     quotes = {
-                        'symbol': symbol,
-                        'price': row['close'],
-                        'change_percent': row['pct_chg'],
-                        'volume': row['vol'] * 100,
-                        'amount': row['amount'] * 1000,
-                        'high': row['high'],
-                        'low': row['low'],
-                        'open': row['open'],
-                        'pre_close': row['pre_close'],
+                        'symbol': base_code,
+                        'price': price,
+                        'change_percent': pct_chg,
+                        'volume': (row.get('vol') * 100 if row.get('vol') is not None else None),
+                        'amount': (row.get('amount') * 1000 if row.get('amount') is not None else None),
+                        'high': row.get('high'),
+                        'low': row.get('low'),
+                        'open': row.get('open'),
+                        'pre_close': pre_close,
                         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'source': 'tushare'
                     }
@@ -459,27 +470,27 @@ class DataSourceManager:
             except Exception as e:
                 print(f"[Tushare] ❌ 获取失败: {e}")
 
-        # 失败再使用 akshare 兜底
+        # 失败再使用 akshare 兜底（仅A股现货表，部分ETF也可能包含）
         try:
             with network_optimizer.apply():
                 import akshare as ak
-                print(f"[Akshare] 正在获取 {symbol} 的实时行情(兜底)...")
+                print(f"[Akshare] 正在获取 {base_code} 的实时行情(兜底)...")
                 df = ak.stock_zh_a_spot_em()
-            stock_df = df[df['代码'] == symbol]
+            stock_df = df[df['代码'] == base_code]
             if not stock_df.empty:
                 row = stock_df.iloc[0]
                 quotes = {
-                    'symbol': symbol,
-                    'name': row['名称'],
-                    'price': row['最新价'],
-                    'change_percent': row['涨跌幅'],
-                    'change': row['涨跌额'],
-                    'volume': row['成交量'],
-                    'amount': row['成交额'],
-                    'high': row['最高'],
-                    'low': row['最低'],
-                    'open': row['今开'],
-                    'pre_close': row['昨收'],
+                    'symbol': base_code,
+                    'name': row.get('名称'),
+                    'price': row.get('最新价'),
+                    'change_percent': row.get('涨跌幅'),
+                    'change': row.get('涨跌额'),
+                    'volume': row.get('成交量'),
+                    'amount': row.get('成交额'),
+                    'high': row.get('最高'),
+                    'low': row.get('最低'),
+                    'open': row.get('今开'),
+                    'pre_close': row.get('昨收'),
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'source': 'akshare'
                 }
@@ -556,18 +567,17 @@ class DataSourceManager:
             return symbol
         
         # 根据代码判断市场
+        # ETF常见前缀：上交所ETF多为5开头（如510xxx），深交所ETF多为1开头（如159xxx）
         if symbol.startswith('6'):
-            # 上海主板
             return f"{symbol}.SH"
-        elif symbol.startswith('0') or symbol.startswith('3'):
-            # 深圳主板和创业板
+        if symbol.startswith('5'):
+            return f"{symbol}.SH"
+        if symbol.startswith('1') or symbol.startswith('0') or symbol.startswith('3'):
             return f"{symbol}.SZ"
-        elif symbol.startswith('8') or symbol.startswith('4'):
-            # 北交所
+        if symbol.startswith('8') or symbol.startswith('4'):
             return f"{symbol}.BJ"
-        else:
-            # 默认深圳
-            return f"{symbol}.SZ"
+        # 默认深圳
+        return f"{symbol}.SZ"
     
     def _convert_from_ts_code(self, ts_code):
         """
@@ -582,6 +592,102 @@ class DataSourceManager:
         if '.' in ts_code:
             return ts_code.split('.')[0]
         return ts_code
+
+    def _looks_like_etf_code(self, code: str) -> bool:
+        try:
+            s = str(code).strip()
+            return len(s) == 6 and (s.startswith('5') or s.startswith('1'))
+        except Exception:
+            return False
+
+    def get_security_name_and_type(self, symbol: str) -> Optional[dict]:
+        """
+        通过6位代码或带后缀代码，识别股票/ETF并返回名称与标准ts_code。
+        返回: { 'name': str, 'type': 'stock'|'etf', 'ts_code': '000001.SZ' }
+        失败返回 None。
+        """
+        code_raw = (symbol or '').strip().upper()
+        if not code_raw:
+            return None
+        base_code = code_raw.split('.')[0] if '.' in code_raw else code_raw
+        # 仅接受6位数字
+        if len(base_code) != 6 or not base_code.isdigit():
+            return None
+
+        # 1) 尝试TDX实时接口快速拿名称（覆盖股票/ETF）
+        try:
+            q = self._get_tdx_quote(base_code)
+            if q and isinstance(q, dict):
+                nm = q.get('name')
+                if nm:
+                    typ = 'etf' if self._looks_like_etf_code(base_code) else 'stock'
+                    return {
+                        'name': str(nm),
+                        'type': typ,
+                        'ts_code': self._convert_to_ts_code(base_code)
+                    }
+        except Exception:
+            pass
+
+        # 2) Tushare: 先按股票查询
+        if self.tushare_available:
+            ts_code = self._convert_to_ts_code(base_code)
+            try:
+                with network_optimizer.apply():
+                    df = self.tushare_api.stock_basic(ts_code=ts_code, fields='ts_code,name')
+                if df is not None and not df.empty:
+                    return {
+                        'name': str(df.iloc[0]['name']),
+                        'type': 'stock',
+                        'ts_code': ts_code,
+                    }
+            except Exception:
+                pass
+
+            # 3) Tushare: ETF/基金基本信息
+            try:
+                with network_optimizer.apply():
+                    # 直接用ts_code精确查询；若数据源不支持，再按market粗查。
+                    fdf = None
+                    try:
+                        fdf = self.tushare_api.fund_basic(ts_code=ts_code)
+                    except Exception:
+                        fdf = None
+                    if (fdf is None) or fdf.empty:
+                        # 退而求其次，按ETF市场拉取再过滤
+                        fdf = self.tushare_api.fund_basic(market='E')
+                        if fdf is not None and not fdf.empty:
+                            fdf = fdf[fdf['ts_code'] == ts_code]
+                if fdf is not None and not fdf.empty:
+                    # 字段可能为 name 或 fund_name
+                    row = fdf.iloc[0]
+                    nm = row.get('name') if 'name' in row else row.get('fund_name')
+                    if nm:
+                        return {
+                            'name': str(nm),
+                            'type': 'etf',
+                            'ts_code': ts_code,
+                        }
+            except Exception:
+                pass
+
+        # 4) Akshare兜底（仅股票）
+        try:
+            with network_optimizer.apply():
+                import akshare as ak
+                stock_info = ak.stock_individual_info_em(symbol=base_code)
+            if stock_info is not None and not stock_info.empty:
+                for _, row in stock_info.iterrows():
+                    if row.get('item') == '股票简称' and row.get('value'):
+                        return {
+                            'name': str(row['value']),
+                            'type': 'stock',
+                            'ts_code': self._convert_to_ts_code(base_code)
+                        }
+        except Exception:
+            pass
+
+        return None
 
 
 # 全局数据源管理器实例

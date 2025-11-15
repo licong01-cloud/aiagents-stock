@@ -41,6 +41,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=50, help="Codes per batch")
     parser.add_argument("--limit-codes", type=int, default=None, help="Optional limit on number of codes to process")
     parser.add_argument("--max-empty", type=int, default=3, help="Stop after N consecutive empty days for a code")
+    parser.add_argument("--truncate", action="store_true", help="TRUNCATE market.kline_minute_raw before run")
+    parser.add_argument("--job-id", type=str, default=None, help="Existing job id to attach and update")
     return parser.parse_args()
 
 
@@ -178,7 +180,19 @@ def create_run(conn, params: Dict[str, Any]) -> uuid.UUID:
             """,
             (run_id, json.dumps(params, ensure_ascii=False)),
         )
-    return run_id
+
+
+def start_job(conn, job_id: uuid.UUID, summary: Dict[str, Any]) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE market.ingestion_jobs
+               SET status='running', started_at=NOW(), summary=%s
+             WHERE job_id=%s
+            """,
+            (json.dumps(summary, ensure_ascii=False), job_id),
+        )
+    return None
 
 
 def finish_run(conn, run_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
@@ -321,6 +335,10 @@ def main() -> None:
 
     with psycopg2.connect(**DB_CFG) as conn:
         conn.autocommit = True
+        if args.truncate:
+            with conn.cursor() as cur:
+                cur.execute("TRUNCATE TABLE market.kline_minute_raw")
+            print("[WARN] TRUNCATE market.kline_minute_raw executed by user request")
         job_params = {
             "datasets": ["kline_minute_raw"],
             "exchanges": exchanges,
@@ -328,7 +346,11 @@ def main() -> None:
             "end_date": end_date.isoformat(),
             "batch_size": args.batch_size,
         }
-        job_id = create_job(conn, "init", job_params)
+        if args.job_id:
+            job_id = uuid.UUID(args.job_id)
+            start_job(conn, job_id, job_params)
+        else:
+            job_id = create_job(conn, "init", job_params)
         log_ingestion(conn, job_id, "info", "start full minute ingestion job")
 
         params = {
@@ -362,6 +384,7 @@ def main() -> None:
                 "failed_codes": 0,
                 "inserted_rows": 0,
             }
+            update_job_summary(conn, job_id, {"total_codes": stats["total_codes"], "success_codes": 0, "failed_codes": 0, "inserted_rows": 0})
 
             total_days = (end_date - start_date).days + 1
             for batch in chunked(codes, args.batch_size):
@@ -390,6 +413,7 @@ def main() -> None:
                             last_ts_dt = dt.datetime.fromisoformat(last_ts) if last_ts else None
                             if last_ts_dt:
                                 upsert_state(conn, "kline_minute_raw", ts_code, trade_date, last_ts_dt)
+                            update_job_summary(conn, job_id, {"inserted_rows": inserted})
                             print(f"[OK] {ts_code} {trade_date} inserted={inserted}")
                             log_ingestion(conn, job_id, "info", f"run {run_id} {ts_code} {trade_date} inserted={inserted}")
                         except Exception as exc:  # noqa: BLE001
@@ -410,9 +434,11 @@ def main() -> None:
                     if code_failed:
                         stats["failed_codes"] += 1
                         complete_task(conn, task_id, False, progress, "processing failed")
+                        update_job_summary(conn, job_id, {"failed_codes": 1})
                     else:
                         stats["success_codes"] += 1
                         complete_task(conn, task_id, True, 100.0 if progress > 0 else progress, None)
+                        update_job_summary(conn, job_id, {"success_codes": 1})
 
             status = "success" if stats["failed_codes"] == 0 else "failed"
             finish_run(conn, run_id, status, stats)
