@@ -36,6 +36,14 @@ from data_source_manager import data_source_manager
 pgx.register_uuid()
 
 load_dotenv(override=True)
+HOTBOARD_PERF = os.getenv("HOTBOARD_PERF_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
+
+
+def _perf_log_hotboard(name: str, **kwargs: Any) -> None:
+    if not HOTBOARD_PERF:
+        return
+    parts = " ".join(f"{k}={v}" for k, v in kwargs.items())
+    print(f"[PERF hotboard:{name}] {parts}")
 API_TITLE = "TDX Scheduling Backend"
 API_VERSION = "0.1.0"
 DEFAULT_TRIGGERED_BY = "api"
@@ -281,6 +289,28 @@ def _job_status(job_id: uuid.UUID) -> Dict[str, Any]:
         (job_id,),
     )
     logs = [str(r.get("message")) for r in (log_rows or []) if r.get("message") is not None]
+    # small sample of errors for UI to show failure reasons and affected codes/dates
+    error_rows = _fetchall(
+        """
+        SELECT e.run_id, e.ts_code, e.message, e.detail
+          FROM market.ingestion_errors e
+          JOIN market.ingestion_runs r ON r.run_id = e.run_id
+         WHERE r.params->>'job_id' = %s
+         ORDER BY e.run_id, e.ts_code
+         LIMIT 20
+        """,
+        (str(job_id),),
+    )
+    error_samples = []
+    for r in error_rows or []:
+        error_samples.append(
+            {
+                "run_id": str(r.get("run_id")),
+                "ts_code": r.get("ts_code"),
+                "message": r.get("message"),
+                "detail": r.get("detail"),
+            }
+        )
     # Extract inserted_rows from summary (root) or nested stats
     stats = summary.get("stats") or {}
     inserted_rows = int(summary.get("inserted_rows") or stats.get("inserted_rows") or 0)
@@ -305,6 +335,7 @@ def _job_status(job_id: uuid.UUID) -> Dict[str, Any]:
         "progress": percent,
         "counters": counters,
         "logs": logs,
+        "error_samples": error_samples,
     }
 
 
@@ -1023,6 +1054,7 @@ def get_app() -> FastAPI:
 
     @app.get("/api/hotboard/realtime")
     def hotboard_realtime(metric: str = "combo", alpha: float = 0.5, cate_type: Optional[int] = None, at: Optional[str] = None) -> Dict[str, Any]:
+        t0 = time.perf_counter()
         the_ts = None
         if at:
             try:
@@ -1032,12 +1064,15 @@ def get_app() -> FastAPI:
         if the_ts is None:
             the_ts = _latest_intraday_ts()
         if the_ts is None:
+            t_end = time.perf_counter()
+            _perf_log_hotboard("realtime", lookup_ms=round((t_end - t0) * 1000, 1), rows=0)
             return {"ts": None, "items": []}
         where = "WHERE ts=%s"
         params: List[Any] = [the_ts]
         if cate_type is not None:
             where += " AND cate_type=%s"
             params.append(int(cate_type))
+        t1 = time.perf_counter()
         rows = _fetchall(
             f"""
             SELECT cate_type, board_code, board_name, pct_chg, amount, net_inflow, turnover, ratioamount
@@ -1047,6 +1082,7 @@ def get_app() -> FastAPI:
             """,
             tuple(params),
         )
+        t2 = time.perf_counter()
         # compute visual score
         chg = [float(r.get("pct_chg") or 0.0) for r in rows]
         flow = [float(r.get("net_inflow") or 0.0) for r in rows]
@@ -1064,6 +1100,15 @@ def get_app() -> FastAPI:
                 score.append(a * nz_chg[i] + (1 - a) * nz_flow[i])
         for i, r in enumerate(rows):
             r["score"] = score[i]
+        t3 = time.perf_counter()
+        _perf_log_hotboard(
+            "realtime",
+            lookup_ms=round((t1 - t0) * 1000, 1),
+            query_ms=round((t2 - t1) * 1000, 1),
+            score_ms=round((t3 - t2) * 1000, 1),
+            total_ms=round((t3 - t0) * 1000, 1),
+            rows=len(rows),
+        )
         return {"ts": _isoformat(the_ts), "items": rows}
 
     @app.get("/api/hotboard/realtime/timestamps")
@@ -1092,6 +1137,7 @@ def get_app() -> FastAPI:
         if cate_type is not None:
             where += " AND cate_type=%s"
             params.append(int(cate_type))
+        t0 = time.perf_counter()
         rows = _fetchall(
             f"""
             SELECT trade_date, cate_type, board_code, board_name, pct_chg, amount, net_inflow, turnover, ratioamount
@@ -1100,6 +1146,12 @@ def get_app() -> FastAPI:
             ORDER BY cate_type ASC, board_code ASC
             """,
             tuple(params),
+        )
+        t1 = time.perf_counter()
+        _perf_log_hotboard(
+            "daily",
+            query_ms=round((t1 - t0) * 1000, 1),
+            rows=len(rows),
         )
         return {"date": date, "items": rows}
 
@@ -1114,7 +1166,7 @@ def get_app() -> FastAPI:
         return {"items": types}
 
     @app.get("/api/hotboard/tdx/daily")
-    def tdx_board_daily(date: str, idx_type: Optional[str] = None) -> Dict[str, Any]:
+    def tdx_board_daily(date: str, idx_type: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
         # Join to the latest index row per ts_code (<= date) to avoid empty results when index table lacks same-date rows
         params: List[Any] = [date, date]
         where_extra = ""
@@ -1136,9 +1188,18 @@ def get_app() -> FastAPI:
              WHERE d.trade_date = %s
             """ + where_extra + """
              ORDER BY i2.idx_type, d.amount DESC NULLS LAST
+             LIMIT %s
             """
         )
+        t0 = time.perf_counter()
+        params.append(max(1, int(limit)))
         rows = _fetchall(sql, tuple(params))
+        t1 = time.perf_counter()
+        _perf_log_hotboard(
+            "tdx_daily",
+            query_ms=round((t1 - t0) * 1000, 1),
+            rows=len(rows),
+        )
         return {"date": date, "items": rows}
 
     @app.get("/api/hotboard/top-stocks/realtime")
@@ -1151,6 +1212,7 @@ def get_app() -> FastAPI:
         # gather membership (up to a few pages)
         stocks: List[Dict[str, Any]] = []
         page = 1
+        t0 = time.perf_counter()
         while page <= 5 and len(stocks) < max(200, limit):
             part = _sina_concept_stocks(board_code, page=page, num=200)
             if not part:
@@ -1159,16 +1221,21 @@ def get_app() -> FastAPI:
             if len(part) < 200:
                 break
             page += 1
+        t1 = time.perf_counter()
         # build TDX metrics per code
         enriched: List[Dict[str, Any]] = []
+        quote_calls = 0
         for s in stocks:
             code6 = str(s.get("code") or s.get("symbol") or "").split(".")[-1]
             if not code6 or len(code6) != 6:
                 continue
+
+            # 实时行情
             try:
                 q = data_source_manager.get_realtime_quotes(code6)
             except Exception:
                 q = {}
+            quote_calls += 1
             price = q.get("price")
             pre_close = q.get("pre_close")
             pct = None
@@ -1178,9 +1245,22 @@ def get_app() -> FastAPI:
                 except Exception:
                     pct = None
             amount = q.get("amount")
+
+            # 名称分级：s.name / s.ts_name -> data_source_manager -> 最后才退回代码
+            name = s.get("name") or s.get("ts_name")
+            if not name:
+                try:
+                    sec = data_source_manager.get_security_name_and_type(code6)
+                except Exception:
+                    sec = None
+                if isinstance(sec, dict) and sec.get("name"):
+                    name = sec.get("name")
+            if not name:
+                name = code6
+
             enriched.append({
                 "code": code6,
-                "name": s.get("name") or s.get("ts_name") or code6,
+                "name": name,
                 "pct_change": pct,
                 "amount": amount,
                 "open": q.get("open"),
@@ -1189,6 +1269,7 @@ def get_app() -> FastAPI:
                 "low": q.get("low"),
                 "volume": q.get("volume"),
             })
+        t2 = time.perf_counter()
         # rank
         m = (metric or "chg").lower()
         def _key(it: Dict[str, Any]) -> float:
@@ -1197,11 +1278,23 @@ def get_app() -> FastAPI:
             except Exception:
                 return -1e18
         ranked = sorted(enriched, key=_key, reverse=True)[: max(1, int(limit))]
+        t3 = time.perf_counter()
+        _perf_log_hotboard(
+            "top_realtime",
+            sina_ms=round((t1 - t0) * 1000, 1),
+            quotes_ms=round((t2 - t1) * 1000, 1),
+            rank_ms=round((t3 - t2) * 1000, 1),
+            total_ms=round((t3 - t0) * 1000, 1),
+            stocks=len(stocks),
+            quote_calls=quote_calls,
+            returned=len(ranked),
+        )
         return {"items": ranked}
 
     @app.get("/api/hotboard/top-stocks/tdx")
     def top_stocks_tdx(board_code: str, date: str, metric: str = "chg", limit: int = 20) -> Dict[str, Any]:
         # membership on the date
+        t0 = time.perf_counter()
         mem = _fetchall(
             """
             SELECT con_code FROM market.tdx_board_member
@@ -1211,6 +1304,13 @@ def get_app() -> FastAPI:
         )
         codes = [r.get("con_code") for r in mem if r.get("con_code")]
         if not codes:
+            t_end = time.perf_counter()
+            _perf_log_hotboard(
+                "top_tdx",
+                membership_ms=round((t_end - t0) * 1000, 1),
+                codes=0,
+                rows=0,
+            )
             return {"items": []}
         # join daily kline for the date (use qfq as reference)
         # compute intraday change using open/close when pre_close unavailable
@@ -1221,10 +1321,12 @@ def get_app() -> FastAPI:
              WHERE k.trade_date=%s AND k.ts_code = ANY(%s)
         """
         rows = []
+        t1 = time.perf_counter()
         with get_conn() as conn:
             with conn.cursor(cursor_factory=pgx.RealDictCursor) as cur:
                 cur.execute(sql, (date, where_codes))
                 rows = [dict(r) for r in cur.fetchall()]
+        t2 = time.perf_counter()
         items: List[Dict[str, Any]] = []
         for r in rows:
             try:
@@ -1246,6 +1348,17 @@ def get_app() -> FastAPI:
                 continue
         key = (lambda x: (x.get("pct_chg") or -1e9)) if metric == "chg" else (lambda x: (x.get("amount") or 0.0))
         items = sorted(items, key=key, reverse=True)[: max(1, int(limit))]
+        t3 = time.perf_counter()
+        _perf_log_hotboard(
+            "top_tdx",
+            membership_ms=round((t1 - t0) * 1000, 1),
+            query_ms=round((t2 - t1) * 1000, 1),
+            score_ms=round((t3 - t2) * 1000, 1),
+            total_ms=round((t3 - t0) * 1000, 1),
+            codes=len(codes),
+            rows=len(rows),
+            returned=len(items),
+        )
         return {"date": date, "board_code": board_code, "items": items}
 
     # ------------------------------------------------------------------

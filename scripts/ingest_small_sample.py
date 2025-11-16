@@ -6,11 +6,12 @@ import sys
 import json
 import time
 import datetime as dt
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import requests
 import psycopg2
 import psycopg2.extras as pgx
+from requests import exceptions as req_exc
 
 TDX_API_BASE = os.getenv('TDX_API_BASE', 'http://localhost:8080')
 DB = dict(
@@ -29,9 +30,24 @@ SAMPLE_CODES = [
 
 def http_get(path: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
     url = TDX_API_BASE.rstrip('/') + path
-    r = requests.get(url, params=params, timeout=10)
-    r.raise_for_status()
-    return r.json()
+    max_retries = 3
+    last_exc: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        try:
+            r = requests.get(url, params=params, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            if isinstance(data, dict) and data.get('code') != 0:
+                raise RuntimeError(f"TDX API error {path}: {data}")
+            return data
+        except (req_exc.ConnectionError, req_exc.Timeout) as exc:
+            last_exc = exc
+            if attempt >= max_retries:
+                break
+            time.sleep(1 + attempt)
+        except Exception:
+            raise
+    raise last_exc or RuntimeError(f"TDX API request failed after retries: {url}")
 
 
 def _to_date(v: Any) -> str | None:

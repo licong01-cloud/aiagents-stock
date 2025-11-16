@@ -68,6 +68,11 @@ def _render_init_tab() -> None:
                         }
                         payload = {"dataset": dataset, "options": opts}
                         resp = _backend_request("POST", "/api/ingestion/init", json=payload)
+                        # 记录作业 ID，便于下方统一使用 /api/ingestion/job/{job_id} 轮询进度
+                        st.session_state["init_job_id"] = resp.get("job_id")
+                        st.session_state["init_auto_refresh"] = True
+                        st.success("初始化任务已提交")
+                        st.rerun()
                     else:
                         if dataset == "tushare_trade_cal":
                             # 交易日历同步
@@ -332,6 +337,7 @@ def _render_adjust_tab() -> None:
         with col2:
             end_date = st.text_input("结束日期", value=dt.date.today().isoformat())
         exchanges = st.text_input("交易所(逗号分隔)", value="sh,sz,bj")
+        workers = st.selectbox("并行度", options=[1, 2, 4, 8], index=0, format_func=lambda x: f"{x} 线程")
         truncate = st.checkbox("生成前清理目标表/范围", value=False)
         confirm = st.checkbox("我已知晓清理数据的风险，并确认继续")
         submitted = st.form_submit_button("开始生成", type="primary")
@@ -345,6 +351,7 @@ def _render_adjust_tab() -> None:
                         "start_date": start_date,
                         "end_date": end_date,
                         "exchanges": [s.strip() for s in exchanges.split(",") if s.strip()],
+                        "workers": int(workers),
                         "truncate": bool(truncate),
                     }
                     resp = _backend_request("POST", "/api/adjust/rebuild", json={"options": opts})
@@ -394,20 +401,57 @@ def _render_ingestion_logs(logs: List[Dict[str, Any]]) -> None:
     if not logs:
         st.info("暂无入库日志")
         return
-    df = pd.DataFrame(
-        [
+    rows: List[Dict[str, Any]] = []
+    for item in logs:
+        payload = item.get("payload") or {}
+        summary = payload.get("summary") or {}
+        dataset = summary.get("dataset")
+        # 兼容早期日志：数据集可能存放在 datasets 列表中
+        if dataset is None:
+            datasets = summary.get("datasets")
+            if isinstance(datasets, list) and datasets:
+                dataset = datasets[0]
+        # 再次兜底：从原始文本中提取首个词作为任务内容
+        if dataset is None:
+            raw = payload.get("raw")
+            if isinstance(raw, str) and raw.strip():
+                dataset = raw.split()[0]
+        mode = summary.get("mode") or payload.get("status")
+        dataset_label = str(dataset) if dataset is not None else "—"
+        task_label = dataset_label
+        if isinstance(mode, str) and mode:
+            task_label = f"{dataset_label} · {mode}"
+        note: Optional[str] = None
+        if payload.get("error") is not None:
+            note = str(payload.get("error"))
+        elif payload.get("summary") is not None:
+            note = str(payload.get("summary"))
+        else:
+            raw_val = payload.get("raw")
+            if isinstance(raw_val, str) and raw_val.strip():
+                note = raw_val
+        # 若以上均为空，则尝试从 logs 字段中提取部分错误输出
+        if note is None:
+            logs_text = payload.get("logs")
+            if isinstance(logs_text, str) and logs_text.strip():
+                # 只展示最后 300 个字符，避免页面过长
+                snippet = logs_text.strip()
+                if len(snippet) > 300:
+                    snippet = "..." + snippet[-300:]
+                note = snippet
+        rows.append(
             {
+                "任务内容": task_label,
+                "运行ID": item.get("run_id"),
                 "日志时间": _iso(item.get("timestamp")),
                 "级别": item.get("level"),
-                "运行ID": item.get("run_id"),
-                "数据集": (item.get("payload") or {}).get("summary", {}).get("dataset"),
-                "模式": (item.get("payload") or {}).get("summary", {}).get("mode"),
-                "状态": (item.get("payload") or {}).get("status"),
-                "备注": (item.get("payload") or {}).get("error") or (item.get("payload") or {}).get("summary"),
+                "数据集": dataset_label,
+                "模式": mode,
+                "状态": payload.get("status"),
+                "备注": note,
             }
-            for item in logs
-        ]
-    )
+        )
+    df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True)
 
 
@@ -452,6 +496,7 @@ def _render_task_monitor() -> None:
             cat = "板块数据"
         percent = int(job.get("progress") or 0)
         counters = job.get("counters") or {}
+        error_samples = job.get("error_samples") or []
         status = (job.get("status") or "").lower()
         if status in {"running", "queued", "pending"}:
             any_active = True
@@ -461,6 +506,68 @@ def _render_task_monitor() -> None:
             st.caption(
                 f"总数 {counters.get('total', 0)} · 已完成 {counters.get('done', 0)} · 运行中 {counters.get('running', 0)} · 排队 {counters.get('pending', 0)} · 成功 {counters.get('success', 0)} · 失败 {counters.get('failed', 0)}"
             )
+            # 根据 summary 显示本任务处理的数据来源与范围，便于快速理解任务内容
+            source_label = "—"
+            ds_lower = (dataset or "").lower() if isinstance(dataset, str) else str(dataset or "")
+            if ds_lower in {"kline_daily_qfq", "kline_daily", "kline_daily_raw"}:
+                source_label = "TDX 日线行情"
+            elif ds_lower in {"kline_minute_raw", "minute_1m"}:
+                source_label = "TDX 分钟行情"
+            elif ds_lower == "adjust_daily":
+                source_label = "Tushare 复权因子"
+            elif ds_lower.startswith("tdx_board_"):
+                source_label = "TDX 板块数据"
+
+            start_date = summary.get("start_date") or summary.get("start") or summary.get("date_from")
+            end_date = summary.get("end_date") or summary.get("end") or summary.get("date_to")
+            target_date = summary.get("date") or summary.get("target_date")
+            date_range_text: Optional[str]
+            if start_date or end_date:
+                date_range_text = f"{start_date or '—'} .. {end_date or '—'}"
+            elif target_date:
+                date_range_text = str(target_date)
+            else:
+                date_range_text = "—"
+
+            exchanges_val = summary.get("exchanges")
+            if isinstance(exchanges_val, (list, tuple)):
+                exchanges_text = ",".join(str(x) for x in exchanges_val)
+            elif isinstance(exchanges_val, str):
+                exchanges_text = exchanges_val
+            else:
+                exchanges_text = None
+
+            extra_parts: List[str] = []
+            if exchanges_text:
+                extra_parts.append(f"交易所：{exchanges_text}")
+            if date_range_text and date_range_text != "—":
+                extra_parts.append(f"日期：{date_range_text}")
+            # 复权专用的一些参数
+            which_val = summary.get("which")
+            if which_val:
+                extra_parts.append(f"复权类型：{which_val}")
+            workers_val = summary.get("workers")
+            if workers_val:
+                extra_parts.append(f"并行度：{workers_val}")
+
+            range_text = " · ".join(extra_parts) if extra_parts else "—"
+            st.caption(f"数据源：{source_label} · 数据集：{dataset or '—'} · 范围：{range_text}")
+            # 如果有失败任务，展示一小段错误样本（代码 + 日期/范围 + 简要错误信息）
+            if counters.get("failed", 0) > 0 and error_samples:
+                with st.expander("查看失败明细（样本）", expanded=False):
+                    for err in error_samples:
+                        ts_code = err.get("ts_code") or "—"
+                        detail = err.get("detail") or {}
+                        # detail 中通常包含 code / trade_date 或日期范围
+                        trade_date = None
+                        if isinstance(detail, dict):
+                            trade_date = detail.get("trade_date") or detail.get("date") or detail.get("start_date")
+                        msg = str(err.get("message") or "").strip()
+                        if len(msg) > 200:
+                            msg = msg[:200] + "..."
+                        st.markdown(
+                            f"- 代码：`{ts_code}` · 日期/范围：{trade_date or '未知'}\n  \n  错误：{msg}"
+                        )
 
 
     if auto and any_active:

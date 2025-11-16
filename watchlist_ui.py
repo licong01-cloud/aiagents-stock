@@ -164,6 +164,14 @@ def _to_date_only(value: Any) -> Optional[str]:
         return None
 
 
+def _display_code(code: str) -> str:
+    """将内部存储的代码（ts_code 或 6位）规范为前端展示用的 6 位代码。"""
+    code = (code or "").strip()
+    if not code:
+        return ""
+    return data_source_manager._convert_from_ts_code(code) if "." in code else code
+
+
 def _cmp_numeric(val: Optional[float], op: str, target: Optional[float]) -> bool:
     if target is None:
         return True
@@ -856,7 +864,10 @@ def display_watchlist_manager():
         date_f = f.get("date", {})
 
         def ok_text(it: Dict[str, Any]) -> bool:
-            if t_code and t_code not in str(it.get("code") or "").lower():
+            # 代码过滤：既支持按 ts_code，也支持按 6 位代码过滤
+            code_ts = str(it.get("code") or "")
+            code6 = _display_code(code_ts)
+            if t_code and (t_code not in code6.lower()) and (t_code not in code_ts.lower()):
                 return False
             if t_name and t_name not in str(it.get("name") or "").lower():
                 return False
@@ -937,7 +948,7 @@ def display_watchlist_manager():
                     join_date = str(created_iso)
             rows.append({
                 "选择": it["id"] in selected_ids_prev,
-                "代码": it["code"],
+                "代码": _display_code(it["code"]),
                 "名称": it["name"],
                 "分类": it.get("category_names") or "-",
                 "最新价": None if rt["last"] is None else float(f"{rt['last']:.2f}"),

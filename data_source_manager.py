@@ -262,39 +262,76 @@ class DataSourceManager:
         return df
     
     def get_stock_basic_info(self, symbol):
-        """
-        获取股票基本信息（优先tushare，失败时使用akshare）
-        
+        """获取股票/ETF基本信息（优先tushare，失败时使用akshare）。
+
         Args:
-            symbol: 股票代码
-            
+            symbol: 股票代码（6位或带后缀）
+
         Returns:
-            dict: 股票基本信息
+            dict: 基本信息字典，至少包含 symbol/name/industry/market。
         """
         info = {
             "symbol": symbol,
             "name": "未知",
             "industry": "未知",
-            "market": "未知"
+            "market": "未知",
         }
-        
-        # 优先使用 tushare
+
+        base_code = self._convert_from_ts_code(symbol) if "." in str(symbol) else str(symbol).strip()
+
+        # 优先使用 tushare（区分股票与ETF），ETF 查询不到时回退到 stock_basic
         if self.tushare_available:
             try:
                 with network_optimizer.apply():
                     print(f"[Tushare] 正在获取 {symbol} 的基本信息...")
-                    ts_code = self._convert_to_ts_code(symbol)
-                    df = self.tushare_api.stock_basic(
-                        ts_code=ts_code,
-                        fields='ts_code,name,area,industry,market,list_date'
-                    )
-                if df is not None and not df.empty:
-                    info['name'] = df.iloc[0]['name']
-                    info['industry'] = df.iloc[0]['industry']
-                    info['market'] = df.iloc[0]['market']
-                    info['list_date'] = df.iloc[0]['list_date']
-                    print(f"[Tushare] ✅ 成功获取基本信息")
-                    return info
+                    ts_code = self._convert_to_ts_code(base_code)
+                    is_etf = self._looks_like_etf_code(base_code)
+                    df = None
+
+                    # 1) 若看起来像 ETF，优先尝试 fund_basic
+                    if is_etf:
+                        try:
+                            df = self.tushare_api.fund_basic(ts_code=ts_code)
+                        except Exception:
+                            df = None
+                        if df is None or df.empty:
+                            # 退而求其次：按市场拉取再过滤
+                            try:
+                                df = self.tushare_api.fund_basic(market='E')
+                                if df is not None and not df.empty:
+                                    df = df[df['ts_code'] == ts_code]
+                            except Exception:
+                                df = None
+
+                    # 2) 若仍然没有数据（包括普通股票或 ETF 未命中），统一回退到 stock_basic
+                    if df is None or df.empty:
+                        try:
+                            df = self.tushare_api.stock_basic(
+                                ts_code=ts_code,
+                                fields='ts_code,name,area,industry,market,list_date'
+                            )
+                        except Exception:
+                            df = None
+
+                    # 3) 只要拿到了数据，就尝试解析名称等字段
+                    if df is not None and not df.empty:
+                        row = df.iloc[0]
+                        # ETF 可能字段为 name 或 fund_name；stock_basic 则为 name
+                        nm = None
+                        if 'name' in row and row.get('name'):
+                            nm = row.get('name')
+                        elif 'fund_name' in row and row.get('fund_name'):
+                            nm = row.get('fund_name')
+                        if nm:
+                            info['name'] = nm
+                        if 'industry' in row and row.get('industry'):
+                            info['industry'] = row.get('industry')
+                        if 'market' in row and row.get('market'):
+                            info['market'] = row.get('market')
+                        if 'list_date' in row and row.get('list_date'):
+                            info['list_date'] = row.get('list_date')
+                        print(f"[Tushare] ✅ 成功获取基本信息")
+                        return info
             except Exception as e:
                 print(f"[Tushare] ❌ 获取失败: {e}")
 
@@ -607,42 +644,55 @@ class DataSourceManager:
         失败返回 None。
         """
         code_raw = (symbol or '').strip().upper()
+        print(f"[DS] get_security_name_and_type symbol='{symbol}', code_raw='{code_raw}'")
         if not code_raw:
+            print("[DS] get_security_name_and_type: empty code_raw, return None")
             return None
         base_code = code_raw.split('.')[0] if '.' in code_raw else code_raw
+        print(f"[DS] get_security_name_and_type base_code='{base_code}'")
         # 仅接受6位数字
         if len(base_code) != 6 or not base_code.isdigit():
+            print(f"[DS] get_security_name_and_type: invalid base_code '{base_code}', return None")
             return None
 
-        # 1) 尝试TDX实时接口快速拿名称（覆盖股票/ETF）
+        # 1) 尝试TDX实时接口快速拿名称（覆盖股票/ETF）。如果返回的“名称”等于纯6位代码，则视为无效名称，继续走 Tushare/Akshare。
         try:
+            print(f"[DS] get_security_name_and_type: querying TDX with base_code='{base_code}'")
             q = self._get_tdx_quote(base_code)
             if q and isinstance(q, dict):
                 nm = q.get('name')
-                if nm:
+                # 某些环境下 TDX 会把代码作为 name 返回，例如 '600103'，这时不能直接当作有效名称
+                if nm and not (str(nm).strip().isdigit() and len(str(nm).strip()) == 6):
                     typ = 'etf' if self._looks_like_etf_code(base_code) else 'stock'
+                    print(f"[DS] TDX hit: name='{nm}', type='{typ}'")
                     return {
                         'name': str(nm),
                         'type': typ,
                         'ts_code': self._convert_to_ts_code(base_code)
                     }
-        except Exception:
-            pass
+                else:
+                    print(f"[DS] TDX returned code-like name '{nm}' for {base_code}, will fallback to Tushare/Akshare")
+            else:
+                print(f"[DS] TDX returned no name for {base_code}: {q}")
+        except Exception as e:
+            print(f"[DS] TDX lookup failed for {base_code}: {e}")
 
         # 2) Tushare: 先按股票查询
         if self.tushare_available:
             ts_code = self._convert_to_ts_code(base_code)
+            print(f"[DS] get_security_name_and_type: tushare available, ts_code='{ts_code}'")
             try:
                 with network_optimizer.apply():
                     df = self.tushare_api.stock_basic(ts_code=ts_code, fields='ts_code,name')
                 if df is not None and not df.empty:
+                    print(f"[DS] stock_basic hit for ts_code='{ts_code}', name='{df.iloc[0]['name']}'")
                     return {
                         'name': str(df.iloc[0]['name']),
                         'type': 'stock',
                         'ts_code': ts_code,
                     }
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[DS] stock_basic failed for ts_code='{ts_code}': {e}")
 
             # 3) Tushare: ETF/基金基本信息
             try:
@@ -651,10 +701,12 @@ class DataSourceManager:
                     fdf = None
                     try:
                         fdf = self.tushare_api.fund_basic(ts_code=ts_code)
-                    except Exception:
+                    except Exception as e:
+                        print(f"[DS] fund_basic(ts_code={ts_code}) failed: {e}")
                         fdf = None
                     if (fdf is None) or fdf.empty:
                         # 退而求其次，按ETF市场拉取再过滤
+                        print(f"[DS] fund_basic(ts_code={ts_code}) empty, fallback fund_basic(market='E') filter ts_code")
                         fdf = self.tushare_api.fund_basic(market='E')
                         if fdf is not None and not fdf.empty:
                             fdf = fdf[fdf['ts_code'] == ts_code]
@@ -663,13 +715,14 @@ class DataSourceManager:
                     row = fdf.iloc[0]
                     nm = row.get('name') if 'name' in row else row.get('fund_name')
                     if nm:
+                        print(f"[DS] fund_basic hit for ts_code='{ts_code}', name='{nm}'")
                         return {
                             'name': str(nm),
                             'type': 'etf',
                             'ts_code': ts_code,
                         }
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[DS] fund_basic lookup failed for ts_code='{ts_code}': {e}")
 
         # 4) Akshare兜底（仅股票）
         try:
@@ -679,14 +732,16 @@ class DataSourceManager:
             if stock_info is not None and not stock_info.empty:
                 for _, row in stock_info.iterrows():
                     if row.get('item') == '股票简称' and row.get('value'):
+                        print(f"[DS] Akshare hit for {base_code}, name='{row['value']}'")
                         return {
                             'name': str(row['value']),
                             'type': 'stock',
                             'ts_code': self._convert_to_ts_code(base_code)
                         }
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[DS] Akshare lookup failed for {base_code}: {e}")
 
+        print(f"[DS] get_security_name_and_type: all lookups failed for {base_code}, return None")
         return None
 
 

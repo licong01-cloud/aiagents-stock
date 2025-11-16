@@ -20,6 +20,7 @@ import json
 import os
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
@@ -55,6 +56,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--truncate", action="store_true", help="Delete target rows for selected codes/date range before rebuild")
     parser.add_argument("--job-id", type=str, default=None, help="Attach to existing job id (pre-created by backend)")
     parser.add_argument("--bulk-session-tune", action="store_true", help="Apply session-level tuning for bulk load (SET synchronous_commit=off, work_mem=256MB)")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        choices=[1, 2, 4, 8],
+        help="Number of parallel workers (1 = no parallelism)",
+    )
     return parser.parse_args()
 
 
@@ -94,14 +102,24 @@ def start_job(conn, job_id: uuid.UUID, summary: Dict[str, Any]) -> None:
 
 
 def finish_job(conn, job_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
+    """Merge final summary into existing ingestion_jobs.summary instead of overwriting."""
     with conn.cursor() as cur:
+        cur.execute("SELECT summary FROM market.ingestion_jobs WHERE job_id=%s", (job_id,))
+        row = cur.fetchone()
+        base: Dict[str, Any] = {}
+        if row and row[0]:
+            try:
+                base = json.loads(row[0]) if isinstance(row[0], str) else dict(row[0])
+            except Exception:
+                base = {}
+        base.update(summary or {})
         cur.execute(
             """
             UPDATE market.ingestion_jobs
                SET status=%s, finished_at=NOW(), summary=%s
              WHERE job_id=%s
             """,
-            (status, json.dumps(summary, ensure_ascii=False), job_id),
+            (status, json.dumps(base, ensure_ascii=False), job_id),
         )
 
 
@@ -296,6 +314,9 @@ def main() -> None:
 
     with psycopg2.connect(**DB_CFG) as conn:
         conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("SET lock_timeout = '5s'")
+            cur.execute("SET statement_timeout = '5min'")
         if args.bulk_session_tune:
             with conn.cursor() as cur:
                 cur.execute("SET synchronous_commit = off")
@@ -313,6 +334,7 @@ def main() -> None:
             "start_date": args.start_date,
             "end_date": args.end_date,
             "batch_size": int(args.batch_size),
+            "workers": int(args.workers),
         }
         if args.job_id:
             job_id = uuid.UUID(args.job_id)
@@ -338,45 +360,84 @@ def main() -> None:
         failed = 0
         # initialize summary for UI fallback
         update_job_summary(conn, job_id, {"total_codes": len(codes), "success_codes": 0, "failed_codes": 0, "inserted_rows": 0})
+
+        def _process_code(ts_code: str) -> Tuple[bool, int, bool, str]:
+            """Worker function: process a single ts_code using its own DB connection and Tushare client.
+
+            Returns (ok, inserted_rows, no_raw, error_message).
+            """
+            inserted = 0
+            no_raw = False
+            err_msg = ""
+            try:
+                ts_token = os.getenv("TUSHARE_TOKEN")
+                if not ts_token:
+                    return False, 0, False, "TUSHARE_TOKEN not set in environment"
+                ts.set_token(ts_token)
+                pro = ts.pro_api()
+                with psycopg2.connect(**DB_CFG) as wconn:
+                    wconn.autocommit = True
+                    with wconn.cursor() as cur:
+                        cur.execute("SET lock_timeout = '5s'")
+                        cur.execute("SET statement_timeout = '5min'")
+                    raw_df = get_raw_bars(wconn, ts_code, args.start_date, args.end_date)
+                    if raw_df.empty:
+                        no_raw = True
+                        return True, 0, True, "no raw rows"
+                    factor_df = get_adj_factor(pro, ts_code, args.start_date, args.end_date)
+                    qfq_df, hfq_df = build_adjusted_series(raw_df, factor_df)
+                    if args.which in {"qfq", "both"}:
+                        inserted += upsert_adjusted(wconn, "market.kline_daily_qfq", ts_code, qfq_df, "tushare_adj")
+                    if args.which in {"hfq", "both"}:
+                        inserted += upsert_adjusted(wconn, "market.kline_daily_hfq", ts_code, hfq_df, "tushare_adj")
+                return True, inserted, no_raw, ""
+            except Exception as exc:  # noqa: BLE001
+                err_msg = str(exc)
+                return False, inserted, no_raw, err_msg
+
         pbar = None
         if tqdm is not None:
             try:
                 pbar = tqdm(total=len(codes), desc=f"adjust_{args.which}", unit="code")
             except Exception:
                 pbar = None
-        for idx in range(0, len(codes), args.batch_size):
-            batch = codes[idx : idx + args.batch_size]
-            for ts_code in batch:
+
+        with ThreadPoolExecutor(max_workers=max(1, int(args.workers))) as executor:
+            future_map = {}
+            for ts_code in codes:
                 task_id = create_task(conn, job_id, "adjust_daily", ts_code, args.start_date, args.end_date)
+                fut = executor.submit(_process_code, ts_code)
+                future_map[fut] = (ts_code, task_id)
+
+            for fut in as_completed(future_map):
+                ts_code, task_id = future_map[fut]
                 ok = False
-                err: Optional[str] = None
+                inserted_rows = 0
+                no_raw = False
+                err_msg = ""
                 try:
-                    raw_df = get_raw_bars(conn, ts_code, args.start_date, args.end_date)
-                    if raw_df.empty:
-                        ok = True
-                        complete_task(conn, task_id, True, 100.0, None)
-                        success += 1
-                        log_ingestion(conn, job_id, "info", f"{ts_code} no raw rows in range {args.start_date}..{args.end_date}")
-                        continue
-                    factor_df = get_adj_factor(pro, ts_code, args.start_date, args.end_date)
-                    qfq_df, hfq_df = build_adjusted_series(raw_df, factor_df)
-                    if args.which in {"qfq", "both"}:
-                        total_inserted += upsert_adjusted(conn, "market.kline_daily_qfq", ts_code, qfq_df, "tushare_adj")
-                    if args.which in {"hfq", "both"}:
-                        total_inserted += upsert_adjusted(conn, "market.kline_daily_hfq", ts_code, hfq_df, "tushare_adj")
-                    ok = True
-                    success += 1
-                    complete_task(conn, task_id, True, 100.0, None)
-                    update_job_summary(conn, job_id, {"inserted_rows": len(raw_df), "success_codes": 1})
-                    print(f"[OK] {ts_code} adjusted -> {args.which}")
-                    log_ingestion(conn, job_id, "info", f"{ts_code} adjusted inserted_rows={len(raw_df)}")
+                    ok, inserted_rows, no_raw, err_msg = fut.result()
                 except Exception as exc:  # noqa: BLE001
-                    err = str(exc)
+                    ok = False
+                    err_msg = str(exc)
+                if ok:
+                    if no_raw:
+                        success += 1
+                        complete_task(conn, task_id, True, 100.0, None)
+                        log_ingestion(conn, job_id, "info", f"{ts_code} no raw rows in range {args.start_date}..{args.end_date}")
+                    else:
+                        success += 1
+                        total_inserted += inserted_rows
+                        complete_task(conn, task_id, True, 100.0, None)
+                        update_job_summary(conn, job_id, {"inserted_rows": int(inserted_rows), "success_codes": 1})
+                        print(f"[OK] {ts_code} adjusted -> {args.which} inserted_rows={inserted_rows}")
+                        log_ingestion(conn, job_id, "info", f"{ts_code} adjusted inserted_rows={inserted_rows}")
+                else:
                     failed += 1
-                    complete_task(conn, task_id, False, 0.0, err)
+                    complete_task(conn, task_id, False, 0.0, err_msg or "adjust failed")
                     update_job_summary(conn, job_id, {"failed_codes": 1})
-                    print(f"[WARN] {ts_code} adjust failed: {err}")
-                    log_ingestion(conn, job_id, "error", f"{ts_code} adjust failed: {err}")
+                    print(f"[WARN] {ts_code} adjust failed: {err_msg}")
+                    log_ingestion(conn, job_id, "error", f"{ts_code} adjust failed: {err_msg}")
                 if pbar is not None:
                     try:
                         pbar.update(1)

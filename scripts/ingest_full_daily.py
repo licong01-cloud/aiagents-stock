@@ -21,6 +21,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import psycopg2
 import psycopg2.extras as pgx
 import requests
+from requests import exceptions as req_exc
 try:
     from tqdm import tqdm  # type: ignore
 except Exception:  # noqa: BLE001
@@ -54,12 +55,26 @@ def parse_args() -> argparse.Namespace:
 
 def http_get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     url = TDX_API_BASE.rstrip("/") + path
-    resp = requests.get(url, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-    if isinstance(data, dict) and data.get("code") != 0:
-        raise RuntimeError(f"TDX API error {path}: {data}")
-    return data
+    max_retries = 3
+    last_exc: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, dict) and data.get("code") != 0:
+                raise RuntimeError(f"TDX API error {path}: {data}")
+            return data
+        except (req_exc.ConnectionError, req_exc.Timeout) as exc:
+            last_exc = exc
+            if attempt >= max_retries:
+                break
+            import time
+
+            time.sleep(1 + attempt)
+        except Exception:
+            raise
+    raise last_exc or RuntimeError(f"TDX API request failed after retries: {url}")
 
 
 def normalize_ts_code(code: str) -> Optional[str]:
@@ -198,14 +213,30 @@ def create_job(conn, job_type: str, summary: Dict[str, Any]) -> uuid.UUID:
 
 
 def finish_job(conn, job_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
+    """Finalize job row while保留原有 summary 中的参数信息.
+
+    - 先读取 ingestion_jobs.summary 旧值；
+    - 使用新 summary 覆盖/追加字段（如 run_id/stats），但不清空旧的范围参数；
+    - 同时更新 status/finished_at。
+    """
     with conn.cursor() as cur:
+        cur.execute("SELECT summary FROM market.ingestion_jobs WHERE job_id=%s", (job_id,))
+        row = cur.fetchone()
+        base: Dict[str, Any] = {}
+        if row and row[0]:
+            try:
+                base = json.loads(row[0]) if isinstance(row[0], str) else dict(row[0])
+            except Exception:
+                base = {}
+        # 新 summary 字段覆盖旧值，但未提及的字段（如 start_date/exchanges）保留
+        base.update(summary or {})
         cur.execute(
             """
             UPDATE market.ingestion_jobs
                SET status=%s, finished_at=NOW(), summary=%s
              WHERE job_id=%s
             """,
-            (status, json.dumps(summary, ensure_ascii=False), job_id),
+            (status, json.dumps(base, ensure_ascii=False), job_id),
         )
 
 

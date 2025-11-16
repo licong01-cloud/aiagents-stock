@@ -13,6 +13,7 @@ import time
 
 from portfolio_manager import portfolio_manager
 from portfolio_scheduler import portfolio_scheduler
+from data_source_manager import data_source_manager
 
 
 def display_portfolio_manager():
@@ -80,11 +81,20 @@ def display_portfolio_stocks():
         display_stock_card(stock)
 
 
+def _display_code(code: str) -> str:
+    """将内部存储的代码（ts_code 或 6位）规范为前端展示用的 6 位代码。"""
+    code = (code or "").strip()
+    if not code:
+        return ""
+    return data_source_manager._convert_from_ts_code(code) if "." in code else code
+
+
 def display_stock_card(stock: Dict):
     """显示单个股票卡片"""
     
     stock_id = stock.get("id")  # 获取股票ID
-    code = stock.get("code", "")
+    code_ts = stock.get("code", "")
+    code = _display_code(code_ts)
     name = stock.get("name", "")
     cost_price = stock.get("cost_price")
     quantity = stock.get("quantity")
@@ -117,19 +127,19 @@ def display_stock_card(stock: Dict):
         with col4:
             col_edit, col_del = st.columns(2)
             with col_edit:
-                if st.button("✏️", key=f"edit_{code}", help="编辑"):
-                    st.session_state[f"editing_{code}"] = True
+                if st.button("✏️", key=f"edit_{code_ts}", help="编辑"):
+                    st.session_state[f"editing_{code_ts}"] = True
                     st.rerun()
             with col_del:
-                if st.button("🗑️", key=f"del_{code}", help="删除"):
+                if st.button("🗑️", key=f"del_{code_ts}", help="删除"):
                     portfolio_manager.delete_stock(stock_id)  # 使用stock_id而不是code
                     st.success(f"已删除 {code}")
                     time.sleep(0.5)
                     st.rerun()
         
         # 编辑表单（如果处于编辑状态）
-        if st.session_state.get(f"editing_{code}"):
-            with st.form(key=f"edit_form_{code}"):
+        if st.session_state.get(f"editing_{code_ts}"):
+            with st.form(key=f"edit_form_{code_ts}"):
                 st.markdown(f"#### 编辑 {code}")
                 
                 col_a, col_b = st.columns(2)
@@ -161,14 +171,14 @@ def display_stock_card(stock: Dict):
                             note=new_note,
                             auto_monitor=new_auto_monitor
                         )
-                        del st.session_state[f"editing_{code}"]
+                        del st.session_state[f"editing_{code_ts}"]
                         st.success("更新成功！")
                         time.sleep(0.5)
                         st.rerun()
                 
                 with col_cancel:
                     if st.form_submit_button("取消"):
-                        del st.session_state[f"editing_{code}"]
+                        del st.session_state[f"editing_{code_ts}"]
                         st.rerun()
         
         st.markdown("---")
@@ -433,13 +443,38 @@ def display_batch_analysis():
 def display_analysis_result_card(item: Dict):
     """显示单个分析结果卡片"""
     
-    code = item.get("code", "")
+    code_raw = item.get("code", "")
+    code = _display_code(code_raw)
     result = item.get("result", {})
     
     # 检查分析是否成功
     if result.get("success"):
         final_decision = result.get("final_decision", {})
-        stock_info = result.get("stock_info", {})
+        stock_info = result.get("stock_info", {}) or {}
+
+        # 名称优先级：分析结果里的 name，其次持仓库记录里的 name
+        name = stock_info.get("name") or ""
+        if not name:
+            # 尝试从持仓表中按 ts_code / 基码回查
+            # code_raw 可能是 ts_code 或 6位数字
+            ts_candidates = []
+            if code_raw:
+                ts_candidates.append(code_raw)
+                # 若是 6 位，则转换为 ts_code
+                if "." not in code_raw:
+                    try:
+                        from data_source_manager import data_source_manager  # 局部导入避免循环
+                        ts_candidates.append(data_source_manager._convert_to_ts_code(code_raw))
+                    except Exception:
+                        pass
+            for c in ts_candidates:
+                try:
+                    stock_row = portfolio_manager.db.get_stock_by_code(c)
+                except Exception:
+                    stock_row = None
+                if stock_row and stock_row.get("name"):
+                    name = stock_row.get("name")
+                    break
         
         # 使用正确的字段名
         rating = final_decision.get("rating", "未知")
@@ -457,7 +492,7 @@ def display_analysis_result_card(item: Dict):
         else:
             rating_color = "🟡"
         
-        with st.expander(f"{rating_color} {code} {stock_info.get('name', '')} - {rating} (信心度: {confidence})"):
+        with st.expander(f"{rating_color} {code} {name} - {rating} (信心度: {confidence})"):
             col1, col2 = st.columns(2)
             
             with col1:

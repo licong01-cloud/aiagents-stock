@@ -19,7 +19,9 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import psycopg2
 import psycopg2.extras as pgx
+from psycopg2 import errors as pg_errors
 import requests
+from requests import exceptions as req_exc
 try:
     from tqdm import tqdm  # type: ignore
 except Exception:  # noqa: BLE001
@@ -64,12 +66,26 @@ def parse_args() -> argparse.Namespace:
 
 def http_get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     url = TDX_API_BASE.rstrip("/") + path
-    resp = requests.get(url, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-    if isinstance(data, dict) and data.get("code") != 0:
-        raise RuntimeError(f"TDX API error {path}: {data}")
-    return data
+    max_retries = 3
+    last_exc: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, dict) and data.get("code") != 0:
+                raise RuntimeError(f"TDX API error {path}: {data}")
+            return data
+        except (req_exc.ConnectionError, req_exc.Timeout) as exc:
+            last_exc = exc
+            if attempt >= max_retries:
+                break
+            import time
+
+            time.sleep(1 + attempt)
+        except Exception:
+            raise
+    raise last_exc or RuntimeError(f"TDX API request failed after retries: {url}")
 
 
 def normalize_ts_code(code: str) -> Optional[str]:
@@ -318,14 +334,28 @@ def start_job(conn, job_id: uuid.UUID, summary: Dict[str, Any]) -> None:
 
 
 def finish_job(conn, job_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
+    """Merge final summary into existing ingestion_jobs.summary.
+
+    保留最初 job 创建时写入的范围参数（如 date / start_date / exchanges），
+    只在其基础上增加/覆盖 run_id、stats 等字段。
+    """
     with conn.cursor() as cur:
+        cur.execute("SELECT summary FROM market.ingestion_jobs WHERE job_id=%s", (job_id,))
+        row = cur.fetchone()
+        base: Dict[str, Any] = {}
+        if row and row[0]:
+            try:
+                base = json.loads(row[0]) if isinstance(row[0], str) else dict(row[0])
+            except Exception:
+                base = {}
+        base.update(summary or {})
         cur.execute(
             """
             UPDATE market.ingestion_jobs
                SET status=%s, finished_at=NOW(), summary=%s
              WHERE job_id=%s
             """,
-            (status, json.dumps(summary, ensure_ascii=False), job_id),
+            (status, json.dumps(base, ensure_ascii=False), job_id),
         )
 
 
@@ -497,6 +527,13 @@ def ingest_daily(
                 print(f"[OK] {dataset} {ts_code} inserted={inserted}")
                 log_ingestion(conn, job_id, "info", f"run {run_id} {dataset} {ts_code} inserted={inserted}")
             except Exception as exc:  # noqa: BLE001
+                # 任何写入/状态更新异常都需要先回滚当前事务，否则后续 SQL 会遇到
+                # "current transaction is aborted" 错误。
+                try:
+                    conn.rollback()
+                except Exception:
+                    # 在 autocommit 模式下 rollback 可能会抛错，忽略即可
+                    pass
                 err = str(exc)
                 stats["failed_codes"] += 1
                 try:
@@ -637,6 +674,9 @@ def main() -> None:
 
     with psycopg2.connect(**DB_CFG) as conn:
         conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("SET lock_timeout = '5s'")
+            cur.execute("SET statement_timeout = '5min'")
         if args.bulk_session_tune:
             with conn.cursor() as cur:
                 cur.execute("SET synchronous_commit = off")

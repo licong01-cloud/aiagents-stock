@@ -30,9 +30,8 @@ class PortfolioManager:
     
     # ==================== 持仓股票管理 ====================
     
-    def add_stock(self, code: str, name: str, cost_price: Optional[float] = None,
-                  quantity: Optional[int] = None, note: str = "", 
-                  auto_monitor: bool = True) -> Tuple[bool, str, Optional[int]]:
+    def add_stock(self, code: str, name: str = "", cost_price: Optional[float] = None,
+                  quantity: Optional[int] = None, note: str = "", auto_monitor: bool = True) -> Tuple[bool, str, Optional[int]]:
         """
         添加持仓股票
         
@@ -50,25 +49,58 @@ class PortfolioManager:
         try:
             # 验证股票代码格式（仅接受6位数字；若带后缀则取6位基码）
             raw = (code or "").strip().upper()
+            print(f"[Portfolio] add_stock raw input: '{raw}', name: '{name}'")
             base_code = data_source_manager._convert_from_ts_code(raw) if "." in raw else raw
+            print(f"[Portfolio] normalized base_code for lookup: '{base_code}'")
             if not base_code or len(base_code) != 6 or not base_code.isdigit():
                 return False, "股票代码必须为6位数字", None
 
             # 统一数据接口解析名称与类型（股票/ETF），并拿到标准ts_code
+            print(f"[Portfolio] resolving security via get_security_name_and_type for {base_code} ...")
             sec = data_source_manager.get_security_name_and_type(base_code)
             if not sec:
+                print(f"[Portfolio] get_security_name_and_type returned None for {base_code}")
                 return False, f"未找到指定股票/ETF: {base_code}", None
+            ts_code = sec.get("ts_code") or data_source_manager._convert_to_ts_code(base_code)
+            print(f"[Portfolio] resolved ts_code: '{ts_code}', sec: {sec}")
 
-            # 检查股票代码是否已存在（以6位基码为唯一键）
-            existing = self.db.get_stock_by_code(base_code)
+            # 检查股票代码是否已存在（以 ts_code 为唯一键）
+            existing = self.db.get_stock_by_code(ts_code)
             if existing:
                 return False, f"股票代码 {base_code} 已存在", None
-            
-            # 确保名称有效（数据库字段非空）；空则使用统一接口返回的名称
-            safe_name = (name.strip() if name else (sec.get("name") or base_code))
 
-            # 添加到数据库
-            stock_id = self.db.add_stock(base_code, safe_name, cost_price, quantity, note, auto_monitor)
+            # 确保名称有效（数据库字段非空）；优先使用统一接口返回的名称，其次 basic_info
+            if name and name.strip():
+                safe_name = name.strip()
+                print(f"[Portfolio] using user-provided name: '{safe_name}' for {base_code}")
+            else:
+                # 先用统一接口返回的名称
+                safe_name = sec.get("name") or ""
+                print(f"[Portfolio] name from get_security_name_and_type: '{safe_name}'")
+                if not safe_name:
+                    # 再用基本信息接口兜底
+                    try:
+                        print(f"[Portfolio] fallback to get_stock_basic_info for {base_code} ...")
+                        info = data_source_manager.get_stock_basic_info(base_code)
+                    except Exception as e:
+                        print(f"[Portfolio] get_stock_basic_info failed for {base_code}: {e}")
+                        info = {}
+                    if isinstance(info, dict):
+                        safe_name = (
+                            info.get("name")
+                            or info.get("stock_name")
+                            or info.get("fund_name")
+                            or ""
+                        )
+                        print(f"[Portfolio] name from get_stock_basic_info: '{safe_name}' for {base_code}")
+                # 对于新增持仓，不再允许仅以代码作为名称写入，必须解析出有效名称
+                if (not safe_name) or (safe_name.strip().isdigit() and len(safe_name.strip()) == 6):
+                    print(f"[Portfolio] final safe_name invalid ('{safe_name}') for {base_code}, aborting add")
+                    return False, f"无法为代码 {base_code} 获取有效名称，请检查网络/Tushare/TDX 配置后重试", None
+
+            # 添加到数据库（存储 ts_code）
+            print(f"[Portfolio] inserting portfolio_stocks: ts_code='{ts_code}', name='{safe_name}'")
+            stock_id = self.db.add_stock(ts_code, safe_name, cost_price, quantity, note, auto_monitor)
             # 同步到自选股分类：持仓股票
             try:
                 cats = watchlist_repo.list_categories()
@@ -79,7 +111,6 @@ class PortfolioManager:
                         break
                 if not cat_id:
                     cat_id = watchlist_repo.create_category("持仓股票", "持仓自动归类")
-                ts_code = sec.get("ts_code") or data_source_manager._convert_to_ts_code(base_code)
                 watchlist_repo.add_item(ts_code, safe_name, cat_id)
             except Exception:
                 # 不影响主流程
@@ -400,13 +431,34 @@ class PortfolioManager:
                 "error": "没有持仓股票"
             }
         
-        stock_codes = [stock['code'] for stock in stocks]
-        
+        # 提前构建 code -> name 映射，便于将名称带入分析结果
+        code_to_name = {stock.get('code'): stock.get('name') for stock in stocks}
+        stock_codes = [stock.get('code') for stock in stocks]
+
         # 根据模式选择分析方法
         if mode == "parallel":
-            return self.batch_analyze_parallel(stock_codes, period, selected_agents, max_workers, progress_callback)
+            res = self.batch_analyze_parallel(stock_codes, period, selected_agents, max_workers, progress_callback)
         else:
-            return self.batch_analyze_sequential(stock_codes, period, selected_agents, progress_callback)
+            res = self.batch_analyze_sequential(stock_codes, period, selected_agents, progress_callback)
+
+        # 将持仓里的名称附加到分析结果 item 上，便于前端直接展示
+        try:
+            for item in res.get("results", []) or []:
+                c = item.get("code")
+                nm = code_to_name.get(c)
+                if nm:
+                    item.setdefault("name", nm)
+            # 失败列表也带上名称，方便通知/日志
+            for f in res.get("failed_stocks", []) or []:
+                c = f.get("code")
+                nm = code_to_name.get(c)
+                if nm:
+                    f.setdefault("name", nm)
+        except Exception:
+            # 附加名称失败不影响主流程
+            pass
+
+        return res
     
     # ==================== 分析结果保存 ====================
     
