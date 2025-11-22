@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en" style="height:100%"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tushare数据</title>
+<meta content="免费股票数据,开源股票数据接口,股票数据,股票数据接口,python股票数据,财经数据,金融数据,行业大数据,区块链数据,量化投资,知识图谱" name="keywords">
+<meta name="description" content="Tushare为金融数据分析提供便捷、快速的接口，与投研和量化策略无缝对接">
+<meta content="index,follow" name="robots">
+<meta name="application-name" content="Tushare">
+<link rel="icon" type="image/png" href="https://tushare.pro/static/frontend/images/favicon-192x192.png?v=811d9139fa2ea47f5595907da1f3c34d" sizes="192x192">
+<link rel="icon" type="image/png" href="https://tushare.pro/static/frontend/images/favicon-160x160.png" sizes="160x160">
+<link rel="icon" type="image/png" href="https://tushare.pro/static/frontend/images/favicon-96x96.png?v=4960eb8103c873c586ad41ef3f53db84" sizes="96x96">
+<link rel="icon" type="image/png" href="https://tushare.pro/static/frontend/images/favicon-16x16.png?v=f7299bbce2cff4db7e3dfa6fb8c6a73c" sizes="16x16">
+<link rel="icon" type="image/png" href="https://tushare.pro/static/frontend/images/favicon-32x32.png?v=a5df4bdd9f96de59f57bb9a7a50d8f96" sizes="32x32">
+<link href="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/bootstrap.min.css" rel="stylesheet">
+<link href="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/style.min.css" rel="stylesheet">
+<link href="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/custom.css" rel="stylesheet">
+
+
+<link rel="stylesheet" href="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/codemirror.css">
+<link rel="stylesheet" href="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/tui-editor.css">
+<link rel="stylesheet" href="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/tui-editor-contents.css">
+<link rel="stylesheet" href="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/github.css">
+<link rel="stylesheet" href="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/md.css">
+
+<!--[if lt IE 9]>
+<script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+<script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+<![endif]-->
+<script type="text/javascript" src="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/require.js"></script>
+<script type="text/javascript" src="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/config.js"></script>
+<script type="text/javascript" charset="utf-8" async="" data-requirecontext="_" data-requiremodule="jquery" src="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/jquery.min.js"></script><script type="text/javascript" charset="utf-8" async="" data-requirecontext="_" data-requiremodule="jstree" src="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/jstree.min.js"></script><script type="text/javascript" charset="utf-8" async="" data-requirecontext="_" data-requiremodule="bootstrap" src="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/bootstrap.min.js"></script><script type="text/javascript" charset="utf-8" async="" data-requirecontext="_" data-requiremodule="validate" src="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/jquery.validate.js"></script><script type="text/javascript" charset="utf-8" async="" data-requirecontext="_" data-requiremodule="custom" src="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/custom.js"></script></head>
+<body style="height:100%">
+<div id="page" style="height:100%;">
+<header id="header" class="site-header">
+<nav id="navbar" class="site-navbar navbar navbar-static-top" role="navigation">
+<div class="container">
+<div class="navbar-header">
+<button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar-collapse-1">
+<span class="sr-only">Toggle navigation</span>
+<i class="fa fa-bars" style="font-size: 1.5em; padding: 15px 0;"></i>
+</button>
+<h1 class="navbar-brand">
+<a href="https://tushare.pro/"><img src="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/logo.png" alt="tushare"></a>
+</h1>
+</div>
+<div class="collapse navbar-collapse" id="navbar-collapse-1">
+<ul id="navigation" class="nav navbar-nav navbar-right">
+<li><a href="https://tushare.pro/">首页</a></li>
+<li><a href="https://tushare.pro/document/1">平台介绍</a></li>
+<li><a href="https://tushare.pro/document/2">数据接口</a></li>
+<!-- <li><a href="/document/41">另类数据</a></li>-->
+<li><a href="https://tushare.pro/news/sina">资讯数据</a></li>
+<li><a href="https://tushare.pro/webclient">数据工具</a></li>
+
+<li class="navbar-tail"><a href="https://tushare.pro/login" class="btn btn-xs pull-right">登 录</a><a href="https://tushare.pro/register" class="btn btn-xs pull-right">注 册</a></li>
+
+</ul>
+</div>
+</div>
+</nav>
+</header>
+
+
+<section id="document" class="whole">
+<div class="container">
+<div class="document">
+<nav class="sidebar col-md-3 col-sm-4 col-xs-12">
+
+            <div id="jstree" class="jstree jstree-1 jstree-default" role="tree" aria-multiselectable="true" tabindex="0" aria-activedescendant="j1_1" aria-busy="false"><ul class="jstree-container-ul jstree-children jstree-no-icons jstree-wholerow-ul jstree-no-dots" role="group"><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_1_anchor" aria-expanded="true" id="j1_1" class="jstree-node   in jstree-open"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=14" tabindex="-1" id="j1_1_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>股票数据</a><ul role="group" class="jstree-children"><li role="treeitem" aria-selected="false" aria-level="2" aria-labelledby="j1_2_anchor" aria-expanded="false" id="j1_2" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=24" tabindex="-1" id="j1_2_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>基础数据</a></li><li role="treeitem" aria-selected="false" aria-level="2" aria-labelledby="j1_15_anchor" aria-expanded="true" id="j1_15" class="jstree-node   in jstree-open"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=15" tabindex="-1" id="j1_15_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>行情数据</a><ul role="group" class="jstree-children"><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_16_anchor" id="j1_16" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=27" tabindex="-1" id="j1_16_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>历史日线</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_17_anchor" id="j1_17" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=372" tabindex="-1" id="j1_17_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>实时日线</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_18_anchor" id="j1_18" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=370" tabindex="-1" id="j1_18_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>历史分钟</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_19_anchor" id="j1_19" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=374" tabindex="-1" id="j1_19_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>实时分钟</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_20_anchor" id="j1_20" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=144" tabindex="-1" id="j1_20_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>周线行情</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_21_anchor" id="j1_21" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=145" tabindex="-1" id="j1_21_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>月线行情</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_22_anchor" id="j1_22" class="jstree-node active jstree-clicked jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=146" tabindex="-1" id="j1_22_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>复权行情</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_23_anchor" id="j1_23" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=336" tabindex="-1" id="j1_23_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>周/月线行情(每日更新)</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_24_anchor" id="j1_24" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=365" tabindex="-1" id="j1_24_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>周/月线复权行情(每日更新)</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_25_anchor" id="j1_25" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=28" tabindex="-1" id="j1_25_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>复权因子</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_26_anchor" id="j1_26" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=315" tabindex="-1" id="j1_26_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>实时Tick（爬虫）</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_27_anchor" id="j1_27" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=316" tabindex="-1" id="j1_27_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>实时成交（爬虫）</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_28_anchor" id="j1_28" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=317" tabindex="-1" id="j1_28_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>实时排名（爬虫）</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_29_anchor" id="j1_29" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=32" tabindex="-1" id="j1_29_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>每日指标</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_30_anchor" id="j1_30" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=109" tabindex="-1" id="j1_30_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>通用行情接口</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_31_anchor" id="j1_31" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=183" tabindex="-1" id="j1_31_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>每日涨跌停价格</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_32_anchor" id="j1_32" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=214" tabindex="-1" id="j1_32_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>每日停复牌信息</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_33_anchor" id="j1_33" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=48" tabindex="-1" id="j1_33_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>沪深股通十大成交股</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_34_anchor" id="j1_34" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=49" tabindex="-1" id="j1_34_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>港股通十大成交股</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_35_anchor" id="j1_35" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=196" tabindex="-1" id="j1_35_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>港股通每日成交统计</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_36_anchor" id="j1_36" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=197" tabindex="-1" id="j1_36_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>港股通每月成交统计</a></li><li role="treeitem" aria-selected="false" aria-level="3" aria-labelledby="j1_37_anchor" id="j1_37" class="jstree-node  jstree-leaf jstree-last"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=255" tabindex="-1" id="j1_37_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>备用行情</a></li></ul></li><li role="treeitem" aria-selected="false" aria-level="2" aria-labelledby="j1_38_anchor" aria-expanded="false" id="j1_38" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=16" tabindex="-1" id="j1_38_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>财务数据</a></li><li role="treeitem" aria-selected="false" aria-level="2" aria-labelledby="j1_49_anchor" aria-expanded="false" id="j1_49" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=17" tabindex="-1" id="j1_49_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>参考数据</a></li><li role="treeitem" aria-selected="false" aria-level="2" aria-labelledby="j1_61_anchor" aria-expanded="false" id="j1_61" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=291" tabindex="-1" id="j1_61_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>特色数据</a></li><li role="treeitem" aria-selected="false" aria-level="2" aria-labelledby="j1_76_anchor" aria-expanded="false" id="j1_76" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=330" tabindex="-1" id="j1_76_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>两融及转融通</a></li><li role="treeitem" aria-selected="false" aria-level="2" aria-labelledby="j1_84_anchor" aria-expanded="false" id="j1_84" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=342" tabindex="-1" id="j1_84_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>资金流向数据</a></li><li role="treeitem" aria-selected="false" aria-level="2" aria-labelledby="j1_93_anchor" aria-expanded="false" id="j1_93" class="jstree-node in jstree-closed jstree-last"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=346" tabindex="-1" id="j1_93_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>打板专题数据</a></li></ul></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_117_anchor" aria-expanded="false" id="j1_117" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=384" tabindex="-1" id="j1_117_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>ETF专题</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_124_anchor" aria-expanded="false" id="j1_124" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=93" tabindex="-1" id="j1_124_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>指数专题</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_140_anchor" aria-expanded="false" id="j1_140" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=18" tabindex="-1" id="j1_140_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>公募基金</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_149_anchor" aria-expanded="false" id="j1_149" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=134" tabindex="-1" id="j1_149_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>期货数据</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_164_anchor" aria-expanded="false" id="j1_164" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=283" tabindex="-1" id="j1_164_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>现货数据</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_167_anchor" aria-expanded="false" id="j1_167" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=157" tabindex="-1" id="j1_167_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>期权数据</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_171_anchor" aria-expanded="false" id="j1_171" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=184" tabindex="-1" id="j1_171_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>债券专题</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_187_anchor" aria-expanded="false" id="j1_187" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=177" tabindex="-1" id="j1_187_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>外汇数据</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_190_anchor" aria-expanded="false" id="j1_190" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=190" tabindex="-1" id="j1_190_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>港股数据</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_202_anchor" aria-expanded="false" id="j1_202" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=251" tabindex="-1" id="j1_202_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>美股数据</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_212_anchor" aria-expanded="false" id="j1_212" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=82" tabindex="-1" id="j1_212_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>行业经济</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_222_anchor" aria-expanded="false" id="j1_222" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=147" tabindex="-1" id="j1_222_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>宏观经济</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_251_anchor" aria-expanded="false" id="j1_251" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=142" tabindex="-1" id="j1_251_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>大模型语料专题数据</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_258_anchor" aria-expanded="false" id="j1_258" class="jstree-node in jstree-closed"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=263" tabindex="-1" id="j1_258_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>财富管理</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_262_anchor" id="j1_262" class="jstree-node  jstree-leaf"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=209" tabindex="-1" id="j1_262_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>数据索引</a></li><li role="treeitem" aria-selected="false" aria-level="1" aria-labelledby="j1_263_anchor" id="j1_263" class="jstree-node  jstree-leaf jstree-last"><div unselectable="on" role="presentation" class="jstree-wholerow">&nbsp;</div><i class="jstree-icon jstree-ocl" role="presentation"></i><a class="jstree-anchor" href="https://tushare.pro/document/2?doc_id=244" tabindex="-1" id="j1_263_anchor"><i class="jstree-icon jstree-themeicon" role="presentation"></i>社区捐助</a></li></ul></div>
+        
+</nav>
+<div class="content col-md-9 col-sm-8 col-xs-12">
+<div class="search-panel">
+<div class="search-container">
+<span class="fa fa-search search-icon"></span>
+<input type="text" class="search-input" placeholder="Search">
+</div>
+</div>
+<h2 id="a股复权行情">A股复权行情</h2>
+<hr>
+<p><strong>接口名称</strong> ：pro_bar<br><strong>接口说明</strong> ：复权行情通过<a href="https://tushare.pro/document/2?doc_id=109">通用行情接口</a>实现，利用Tushare Pro提供的<a href="https://tushare.pro/document/2?doc_id=28">复权因子</a>进行动态计算，因此http方式无法调取。若需要静态复权行情（支持http），请访问<a href="https://tushare.pro/document/2?doc_id=296">股票技术因子接口</a>。<br><strong>Python SDK版本要求</strong>： &gt;= 1.2.26</p>
+<br>
+<br>
+
+<p><strong>复权说明</strong></p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>算法</th>
+<th>参数标识</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>不复权</td>
+<td>无</td>
+<td>空或None</td>
+</tr>
+<tr>
+<td>前复权</td>
+<td>当日收盘价 × 当日复权因子 / 最新复权因子</td>
+<td>qfq</td>
+</tr>
+<tr>
+<td>后复权</td>
+<td>当日收盘价 × 当日复权因子</td>
+<td>hfq</td>
+</tr>
+</tbody></table>
+<br>
+<br>
+注：目前只支持A股的日线复权。在Tushare数据接口里，不管是旧版的一些接口还是Pro版的行情接口，都是以用户设定的end_date开始往前复
+权，跟所有行情软件或者财经网站上看到的前复权可能存在差异，因为行情软件都是以最近一个交易日开始往前复权的。比如今天是2018年10月26日，您想
+查2018年1月5日～2018年9月28日的前复权数据，Tushare是先查找9月28日的复权因子，从28日开始复权，而行情软件是从10月26日
+这天开始复权的。同时，Tushare的复权采用“分红再投”模式计算。
+
+<br>
+<br>
+
+<p><strong>接口参数</strong></p>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>类型</th>
+<th>必选</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ts_code</td>
+<td>str</td>
+<td>Y</td>
+<td>证券代码</td>
+</tr>
+<tr>
+<td>start_date</td>
+<td>str</td>
+<td>N</td>
+<td>开始日期 (格式：YYYYMMDD)</td>
+</tr>
+<tr>
+<td>end_date</td>
+<td>str</td>
+<td>N</td>
+<td>结束日期 (格式：YYYYMMDD)</td>
+</tr>
+<tr>
+<td>asset</td>
+<td>str</td>
+<td>Y</td>
+<td>资产类别：E股票 I沪深指数 C数字货币 FT期货 FD基金 O期权，默认E</td>
+</tr>
+<tr>
+<td>adj</td>
+<td>str</td>
+<td>N</td>
+<td>复权类型(只针对股票)：None未复权 qfq前复权 hfq后复权 , 默认None</td>
+</tr>
+<tr>
+<td>freq</td>
+<td>str</td>
+<td>Y</td>
+<td>数据频度 ：1MIN表示1分钟（1/5/15/30/60分钟） D日线 ，默认D</td>
+</tr>
+<tr>
+<td>ma</td>
+<td>list</td>
+<td>N</td>
+<td>均线，支持任意周期的均价和均量，输入任意合理int数值</td>
+</tr>
+</tbody></table>
+<br>
+<br>
+
+
+<p><strong>接口用例</strong></p>
+<p>日线复权</p>
+<pre><code class="language-python">
+#取000001的前复权行情
+df = ts.pro_bar(ts_code='000001.SZ', adj='qfq', start_date='20180101', end_date='20181011')
+
+#取000001的后复权行情
+df = ts.pro_bar(ts_code='000001.SZ', adj='hfq', start_date='20180101', end_date='20181011')
+</code></pre>
+<br>
+
+
+<p>周线复权</p>
+<pre><code class="language-python">
+#取000001的周线前复权行情
+df = ts.pro_bar( ts_code='000001.SZ', freq='W', adj='qfq', start_date='20180101', end_date='20181011')
+
+#取000001的周线后复权行情
+df = ts.pro_bar(ts_code='000001.SZ', freq='W', adj='hfq', start_date='20180101', end_date='20181011')
+</code></pre>
+<br>
+
+
+<p>月线复权</p>
+<pre><code class="language-python">
+#取000001的月线前复权行情
+df = ts.pro_bar(ts_code='000001.SZ', freq='M', adj='qfq', start_date='20180101', end_date='20181011')
+
+#取000001的月线后复权行情
+df = ts.pro_bar(ts_code='000001.SZ', freq='M', adj='hfq', start_date='20180101', end_date='20181011')
+</code></pre>
+
+</div>
+</div>
+</div>
+</section>
+
+<footer id="footer" class="site-footer">
+<div class="container">
+<div class="row footer-panel">
+<div class="col-md-4">
+<div class=""><img src="Tushare%E6%95%B0%E6%8D%AEpro_bar_files/wechat_public.png" alt=""></div>
+</div>
+<div class="col-md-4">
+<div class="title">使用文档</div>
+<div class="content">
+<ul>
+<li><a href="https://tushare.pro/document/1">平台介绍</a></li>
+<li><a href="https://tushare.pro/document/2">数据接口</a></li>
+<li><a href="https://tushare.pro/document/41">区块链</a></li>
+<li><a href="https://tushare.pro/news">资讯数据</a></li>
+</ul>
+</div>
+</div>
+<div class="col-md-4">
+<div class="title">关注我们</div>
+<div class="content">
+<ul>
+<li>QQ群: 958517905</li>
+<li>公众号：waditu</li>
+<li>Github：<a href="https://github.com/waditu" target="_blank">https://github.com/waditu</a></li>
+<li>雪 球：<a href="https://xueqiu.com/u/9103835084" target="_blank">https://xueqiu.com/u/9103835084</a></li>
+<li>微 博：<a href="https://weibo.com/u/1304687120" target="_blank">https://weibo.com/u/1304687120</a></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="row footer-footer">
+<div class="copyright"><p>© 2018 Tushare <a href="https://beian.miit.gov.cn/" target="_blank">
+"沪ICP备2020031644号"
+</a></p></div>
+</div>
+</div>
+</footer>
+
+</div>
+<div class="scroll-to-top" data-spy="affix" data-offset-top="200">
+<a href="#page" class="smooth-scroll">置顶</a>
+</div>
+
+<script type="text/javascript">
+require(['custom']);
+</script>
+
+
+<script type="text/javascript">
+require([
+'jquery',
+'jstree'
+], function ($, jstree) {
+$(document).ready(function() {
+const tree = $('#jstree').jstree({
+// plugins : ['state']
+plugins : ['wholerow'],
+core: {
+themes: {
+multiple: false,
+icons: false,
+stripes: false,
+expand_selected_onload: true
+}
+}
+});
+tree.on("select_node.jstree", function (e, data) {
+window.location = `${location.protocol}//${location.host}${data.node.a_attr.href}`;
+});
+const searchInput = document.querySelector('.search-input');
+const searchIcon = document.querySelector('.search-icon');
+const onSearch = () => {
+const query = searchInput.value;
+if (query) {
+window.location = `${location.protocol}//${location.host}/document/search?q=${encodeURIComponent(query)}`;
+}
+}
+searchInput.addEventListener('change', onSearch);
+searchIcon.addEventListener('click', onSearch);
+});
+});
+</script>
+
+
+</body></html>

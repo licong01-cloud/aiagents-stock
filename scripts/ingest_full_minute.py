@@ -18,6 +18,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import psycopg2
 import psycopg2.extras as pgx
 import requests
+from requests import exceptions as req_exc
 
 pgx.register_uuid()
 
@@ -43,17 +44,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-empty", type=int, default=3, help="Stop after N consecutive empty days for a code")
     parser.add_argument("--truncate", action="store_true", help="TRUNCATE market.kline_minute_raw before run")
     parser.add_argument("--job-id", type=str, default=None, help="Existing job id to attach and update")
+    parser.add_argument("--bulk-session-tune", action="store_true", help="Apply session-level tuning for bulk load")
     return parser.parse_args()
 
 
 def http_get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     url = TDX_API_BASE.rstrip("/") + path
-    resp = requests.get(url, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-    if isinstance(data, dict) and data.get("code") != 0:
-        raise RuntimeError(f"TDX API error {path}: {data}")
-    return data
+    max_retries = 3
+    last_exc: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, dict) and data.get("code") != 0:
+                raise RuntimeError(f"TDX API error {path}: {data}")
+            return data
+        except (req_exc.ConnectionError, req_exc.Timeout) as exc:  # 网络类错误重试
+            last_exc = exc
+            if attempt >= max_retries:
+                break
+            # 简单退避，避免端口/连接资源瞬间耗尽
+            import time
+
+            time.sleep(1 + attempt)
+        except Exception:
+            # 其他错误不重试，直接抛出以便上层记录错误
+            raise
+    # 若多次重试仍失败，抛出最后一次异常
+    raise last_exc or RuntimeError(f"TDX API request failed after retries: {url}")
 
 
 def normalize_ts_code(code: str) -> Optional[str]:
@@ -180,6 +199,7 @@ def create_run(conn, params: Dict[str, Any]) -> uuid.UUID:
             """,
             (run_id, json.dumps(params, ensure_ascii=False)),
         )
+    return run_id
 
 
 def start_job(conn, job_id: uuid.UUID, summary: Dict[str, Any]) -> None:
@@ -217,17 +237,52 @@ def create_job(conn, job_type: str, summary: Dict[str, Any]) -> uuid.UUID:
 
 
 def finish_job(conn, job_id: uuid.UUID, status: str, summary: Dict[str, Any]) -> None:
+    """Finalize job row and merge summary into existing JSON instead of overwriting."""
     with conn.cursor() as cur:
+        cur.execute("SELECT summary FROM market.ingestion_jobs WHERE job_id=%s", (job_id,))
+        row = cur.fetchone()
+        base: Dict[str, Any] = {}
+        if row and row[0]:
+            try:
+                base = json.loads(row[0]) if isinstance(row[0], str) else dict(row[0])
+            except Exception:
+                base = {}
+        base.update(summary or {})
         cur.execute(
             """
             UPDATE market.ingestion_jobs
                SET status=%s, finished_at=NOW(), summary=%s
              WHERE job_id=%s
             """,
-            (status, json.dumps(summary, ensure_ascii=False), job_id),
+            (status, json.dumps(base, ensure_ascii=False), job_id),
         )
 
+def update_job_summary(conn, job_id: uuid.UUID, patch: Dict[str, Any]) -> None:
+    """Read-modify-write ingestion_jobs.summary to accumulate counters.
 
+    实现与 ingest_full_daily_raw.py 中保持一致：
+    - 先读取 summary JSON；
+    - 对数值字段做累加，其它字段直接覆盖。
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT summary FROM market.ingestion_jobs WHERE job_id=%s", (job_id,))
+        row = cur.fetchone()
+        base: Dict[str, Any] = {}
+        if row and row[0]:
+            try:
+                base = json.loads(row[0]) if isinstance(row[0], str) else dict(row[0])
+            except Exception:
+                base = {}
+        for k, v in (patch or {}).items():
+            if isinstance(v, (int, float)) and isinstance(base.get(k), (int, float)):
+                base[k] = type(base.get(k))(base.get(k, 0) + v)
+            else:
+                base[k] = v
+        cur.execute(
+            "UPDATE market.ingestion_jobs SET summary=%s WHERE job_id=%s",
+            (json.dumps(base, ensure_ascii=False), job_id),
+        )
+        
 def create_task(
     conn,
     job_id: uuid.UUID,
@@ -333,12 +388,25 @@ def main() -> None:
         print("[ERROR] start-date later than end-date")
         sys.exit(1)
 
+    if args.truncate:
+        with psycopg2.connect(**DB_CFG) as conn0:
+            conn0.autocommit = False
+            with conn0.cursor() as cur:
+                cur.execute("SET lock_timeout = '5s'")
+                cur.execute("TRUNCATE TABLE market.kline_minute_raw")
+            conn0.commit()
+        print("[WARN] TRUNCATE market.kline_minute_raw executed by user request")
+
     with psycopg2.connect(**DB_CFG) as conn:
         conn.autocommit = True
-        if args.truncate:
+        with conn.cursor() as cur:
+            cur.execute("SET lock_timeout = '5s'")
+            cur.execute("SET statement_timeout = '5min'")
+        # 可选的批量写入调优，与日线脚本保持一致
+        if getattr(args, "bulk_session_tune", False):
             with conn.cursor() as cur:
-                cur.execute("TRUNCATE TABLE market.kline_minute_raw")
-            print("[WARN] TRUNCATE market.kline_minute_raw executed by user request")
+                cur.execute("SET synchronous_commit = off")
+                cur.execute("SET work_mem = '256MB'")
         job_params = {
             "datasets": ["kline_minute_raw"],
             "exchanges": exchanges,

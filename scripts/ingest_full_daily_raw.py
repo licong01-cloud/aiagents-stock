@@ -22,6 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import psycopg2
 import psycopg2.extras as pgx
 import requests
+from requests import exceptions as req_exc
 
 pgx.register_uuid()
 
@@ -51,12 +52,26 @@ def parse_args() -> argparse.Namespace:
 
 def http_get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     url = TDX_API_BASE.rstrip("/") + path
-    resp = requests.get(url, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-    if isinstance(data, dict) and data.get("code") != 0:
-        raise RuntimeError(f"TDX API error {path}: {data}")
-    return data
+    max_retries = 3
+    last_exc: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, dict) and data.get("code") != 0:
+                raise RuntimeError(f"TDX API error {path}: {data}")
+            return data
+        except (req_exc.ConnectionError, req_exc.Timeout) as exc:
+            last_exc = exc
+            if attempt >= max_retries:
+                break
+            import time
+
+            time.sleep(1 + attempt)
+        except Exception:
+            raise
+    raise last_exc or RuntimeError(f"TDX API request failed after retries: {url}")
 
 
 def normalize_ts_code(code: str) -> Optional[str]:
@@ -355,16 +370,23 @@ def main() -> None:
         print("[ERROR] start-date or end-date format invalid")
         sys.exit(1)
 
+    if args.truncate:
+        with psycopg2.connect(**DB_CFG) as conn0:
+            conn0.autocommit = False
+            with conn0.cursor() as cur:
+                cur.execute("TRUNCATE TABLE market.kline_daily_raw")
+            conn0.commit()
+        print("[WARN] TRUNCATE market.kline_daily_raw executed by user request")
+
     with psycopg2.connect(**DB_CFG) as conn:
         conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("SET lock_timeout = '5s'")
+            cur.execute("SET statement_timeout = '5min'")
         if args.bulk_session_tune:
             with conn.cursor() as cur:
                 cur.execute("SET synchronous_commit = off")
                 cur.execute("SET work_mem = '256MB'")
-        if args.truncate:
-            with conn.cursor() as cur:
-                cur.execute("TRUNCATE TABLE market.kline_daily_raw")
-            print("[WARN] TRUNCATE market.kline_daily_raw executed by user request")
         job_params = {
             "datasets": ["kline_daily_raw"],
             "exchanges": exchanges,

@@ -122,10 +122,10 @@ def display_add_stock_section():
             
             # 关键位置设置
             st.markdown("**🎯 关键位置设置**")
-            entry_min = st.number_input("进场区间最低价", value=0.0, step=0.01, format="%.2f")
-            entry_max = st.number_input("进场区间最高价", value=0.0, step=0.01, format="%.2f")
-            take_profit = st.number_input("止盈价位", value=0.0, step=0.01, format="%.2f", help="可选")
-            stop_loss = st.number_input("止损价位", value=0.0, step=0.01, format="%.2f", help="可选")
+            entry_min = st.number_input("进场区间最低价", value=0.0, step=0.01, format="%.3f")
+            entry_max = st.number_input("进场区间最高价", value=0.0, step=0.01, format="%.3f")
+            take_profit = st.number_input("止盈价位", value=0.0, step=0.01, format="%.3f", help="可选")
+            stop_loss = st.number_input("止损价位", value=0.0, step=0.01, format="%.3f", help="可选")
             
             # 监测参数
             st.markdown("**⏰ 监测参数**")

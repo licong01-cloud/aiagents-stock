@@ -58,6 +58,8 @@ DEFAULT_INGEST_FULL_MINUTE = ROOT_DIR / "scripts" / "ingest_full_minute.py"
 DEFAULT_INGEST_FULL_DAILY_RAW = ROOT_DIR / "scripts" / "ingest_full_daily_raw.py"
 DEFAULT_ADJUST_REBUILD = ROOT_DIR / "scripts" / "rebuild_adjusted_daily.py"
 DEFAULT_INGEST_TUSHARE_TDX_BOARD = ROOT_DIR / "scripts" / "ingest_tushare_tdx_board.py"
+DEFAULT_INGEST_TUSHARE_MONEYFLOW = ROOT_DIR / "scripts" / "ingest_tushare_moneyflow.py"
+DEFAULT_INGEST_WEEKLY_FROM_DAILY = ROOT_DIR / "scripts" / "ingest_tushare_weekly.py"
 
 
 def _ensure_directory(path: Path) -> None:
@@ -480,6 +482,12 @@ class TDXScheduler:
         # Tushare TDX board datasets must use the dedicated script for both modes
         if dataset.startswith("tdx_board_") and mode in {"init", "incremental"}:
             return DEFAULT_INGEST_TUSHARE_TDX_BOARD
+        # Tushare moneyflow_ind_dc uses its own ingestion script for both modes
+        if dataset == "stock_moneyflow" and mode in {"init", "incremental"}:
+            return DEFAULT_INGEST_TUSHARE_MONEYFLOW
+        # Weekly aggregation uses dedicated script, both modes
+        if dataset == "kline_weekly" and mode in {"init", "incremental"}:
+            return DEFAULT_INGEST_WEEKLY_FROM_DAILY
         if mode == "incremental":
             return DEFAULT_INGEST_INCREMENTAL
         if mode == "init" and dataset in {"kline_daily_qfq", "kline_daily"}:
@@ -510,21 +518,40 @@ class TDXScheduler:
                 if options.get("job_id"):
                     args += ["--job-id", str(options["job_id"])]
             else:
-                target = options.get("datasets") or dataset
-                if target:
-                    args += ["--datasets", str(target)]
-                if options.get("date"):
-                    args += ["--date", str(options["date"])]
-                if options.get("start_date"):
-                    args += ["--start-date", str(options["start_date"])]
-                if options.get("exchanges"):
-                    args += ["--exchanges", ",".join(options["exchanges"]) if isinstance(options["exchanges"], (list, tuple)) else str(options["exchanges"])]
-                if options.get("batch_size"):
-                    args += ["--batch-size", str(options["batch_size"])]
-                if options.get("max_empty"):
-                    args += ["--max-empty", str(options["max_empty"])]
-                if options.get("job_id"):
-                    args += ["--job-id", str(options["job_id"])]
+                # Special handling for moneyflow_ind_dc: only trade_date cursor, no datasets/exchanges
+                if dataset == "stock_moneyflow":
+                    args += ["--mode", "incremental"]
+                    if options.get("start_date"):
+                        args += ["--start-date", str(options["start_date"])]
+                    if options.get("end_date"):
+                        args += ["--end-date", str(options["end_date"])]
+                    if options.get("job_id"):
+                        args += ["--job-id", str(options["job_id"])]
+                # Weekly aggregation incremental: just pass mode + date range + job id
+                elif dataset == "kline_weekly":
+                    args += ["--mode", "incremental"]
+                    if options.get("start_date"):
+                        args += ["--start-date", str(options["start_date"])]
+                    if options.get("end_date"):
+                        args += ["--end-date", str(options["end_date"])]
+                    if options.get("job_id"):
+                        args += ["--job-id", str(options["job_id"])]
+                else:
+                    target = options.get("datasets") or dataset
+                    if target:
+                        args += ["--datasets", str(target)]
+                    if options.get("date"):
+                        args += ["--date", str(options["date"])]
+                    if options.get("start_date"):
+                        args += ["--start-date", str(options["start_date"])]
+                    if options.get("exchanges"):
+                        args += ["--exchanges", ",".join(options["exchanges"]) if isinstance(options["exchanges"], (list, tuple)) else str(options["exchanges"])]
+                    if options.get("batch_size"):
+                        args += ["--batch-size", str(options["batch_size"])]
+                    if options.get("max_empty"):
+                        args += ["--max-empty", str(options["max_empty"])]
+                    if options.get("job_id"):
+                        args += ["--job-id", str(options["job_id"])]
         elif mode == "init":
             if dataset in {"kline_daily_qfq", "kline_daily"}:
                 if options.get("exchanges"):
@@ -554,6 +581,26 @@ class TDXScheduler:
                     args += ["--truncate"]
                 if options.get("job_id"):
                     args += ["--job-id", str(options["job_id"])]
+            elif dataset in {"kline_minute_raw", "minute_1m"}:
+                if options.get("exchanges"):
+                    args += [
+                        "--exchanges",
+                        ",".join(options["exchanges"]) if isinstance(options["exchanges"], (list, tuple)) else str(options["exchanges"]),
+                    ]
+                if options.get("start_date"):
+                    args += ["--start-date", str(options["start_date"])]
+                if options.get("end_date"):
+                    args += ["--end-date", str(options["end_date"])]
+                if options.get("batch_size"):
+                    args += ["--batch-size", str(options["batch_size"])]
+                if options.get("limit_codes"):
+                    args += ["--limit-codes", str(options["limit_codes"])]
+                if options.get("max_empty"):
+                    args += ["--max-empty", str(options["max_empty"])]
+                if options.get("truncate"):
+                    args += ["--truncate"]
+                if options.get("job_id"):
+                    args += ["--job-id", str(options["job_id"])]
             elif dataset.startswith("tdx_board_"):
                 args += ["--dataset", dataset, "--mode", "init"]
                 if options.get("start_date"):
@@ -562,6 +609,14 @@ class TDXScheduler:
                     args += ["--end-date", str(options["end_date"])]
                 if options.get("batch_size"):
                     args += ["--batch-size", str(options["batch_size"])]
+                if options.get("job_id"):
+                    args += ["--job-id", str(options["job_id"])]
+            elif dataset == "kline_weekly":
+                args += ["--mode", "init"]
+                if options.get("start_date"):
+                    args += ["--start-date", str(options["start_date"])]
+                if options.get("end_date"):
+                    args += ["--end-date", str(options["end_date"])]
                 if options.get("job_id"):
                     args += ["--job-id", str(options["job_id"])]
         elif mode == "rebuild" and dataset in {"adjust_daily", "kline_adjust_daily"}:
@@ -575,6 +630,8 @@ class TDXScheduler:
                 args += ["--end-date", str(options["end_date"])]
             if options.get("batch_size"):
                 args += ["--batch-size", str(options["batch_size"])]
+            if options.get("workers"):
+                args += ["--workers", str(options["workers"])]
             if options.get("truncate"):
                 args += ["--truncate"]
             if options.get("job_id"):
@@ -819,6 +876,18 @@ class TDXScheduler:
     def _update_ingestion_job_status(
         self, job_id: uuid.UUID, status: str, start_ts: dt.datetime, summary: Dict[str, Any]
     ) -> None:
+        # 读取现有 summary，避免覆盖掉脚本创建 job 时写入的范围参数
+        sql_select = "SELECT summary FROM market.ingestion_jobs WHERE job_id=%s"
+        rows = self._fetchall(sql_select, (job_id,))
+        base: Dict[str, Any] = {}
+        if rows:
+            raw = rows[0].get("summary")
+            if raw:
+                try:
+                    base = json.loads(raw) if isinstance(raw, str) else dict(raw)
+                except Exception:  # noqa: BLE001
+                    base = {}
+        base.update(summary or {})
         sql = """
             UPDATE market.ingestion_jobs
                SET status=%s,
@@ -827,7 +896,7 @@ class TDXScheduler:
                    summary=%s
              WHERE job_id=%s
         """
-        self._execute(sql, (status, start_ts, _json_dump(summary), job_id))
+        self._execute(sql, (status, start_ts, _json_dump(base), job_id))
 
     def _log_ingestion_run(
         self,
@@ -846,7 +915,8 @@ class TDXScheduler:
             INSERT INTO market.ingestion_logs (job_id, ts, level, message)
             VALUES (%s, %s, %s, %s)
         """
-        level = "ERROR" if status != "success" else "INFO"
+        # starting/queued/running 视为正常信息级别，仅 failed 才标记为 ERROR
+        level = "INFO" if status in {"starting", "queued", "running", "success"} else "ERROR"
         log_payload: Dict[str, Any] = {
             "run_id": str(run_id),
             "schedule_id": schedule_id,

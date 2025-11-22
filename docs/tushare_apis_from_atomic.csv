@@ -1,0 +1,120 @@
+﻿api_name,method_name,doc_url,doc_id,description,params_text,returns_text
+stock_basic,stock_basic,https://tushare.pro/document/2?doc_id=25,25,股票基础列表,,
+trade_cal,trade_cal,https://tushare.pro/document/2?doc_id=26,26,交易日历,"exchange, start_date, end_date","exchange, cal_date, is_open, pretrade_date"
+stock_st,stock_st,https://tushare.pro/document/2?doc_id=397,397,ST 股票列表,trade_date,"ts_code, name, type, type_name 等"
+stock_hsgt,stock_hsgt,https://tushare.pro/document/2?doc_id=398,398,沪深港通股票列表,"trade_date, type","ts_code, name, type, type_name 等"
+bse_mapping,bse_mapping,https://tushare.pro/document/2?doc_id=375,375,北交所新旧代码对照,"o_code, n_code","name, o_code, n_code, list_date 等"
+namechange,namechange,https://tushare.pro/document/2?doc_id=100,100,股票曾用名,"ts_code, start_date, end_date","ts_code, name, start_date, end_date, change_reason"
+stock_company,stock_company,https://tushare.pro/document/2?doc_id=112,112,上市公司基本信息,"ts_code, exchange","chairman, manager, secretary, reg_capital, setup_date, province, city, website 等"
+new_share,new_share,https://tushare.pro/document/2?doc_id=123,123,IPO 新股列表,"start_date, end_date","ts_code, sub_code, name, ipo_date, issue_date, amount, market_amount"
+daily,daily,https://tushare.pro/document/2?doc_id=27,27,日线行情,"ts_code, trade_date, start_date, end_date","ts_code, trade_date, open, high, low, close, pre_close, change, pct_chg, vol, amount"
+stk_week_month_adj,stk_week_month_adj,https://tushare.pro/document/2?doc_id=365,365,复权周/月线行情,"ts_code, freq, start_date, end_date",复权周/月K数据
+stk_weekly_monthly,stk_weekly_monthly,https://tushare.pro/document/2?doc_id=336,336,周/月线行情（每日更新）,"trade_date, freq, ts_code","trade_date, end_date, close, change, pct_chg 等"
+bak_basic,bak_basic,https://tushare.pro/document/2  (以实际子页为准),,备用行情-基础信息（退市等扩展口径）,"trade_date, ts_code 等",不同于常规模块的扩展基础口径
+bak_daily,bak_daily,https://tushare.pro/document/2?doc_id=255,255,备用行情-日线,"trade_date, start_date, end_date, ts_code",与常规模块口径差异的日线字段
+bak_weekly,bak_weekly,https://tushare.pro/document/2?doc_id=171,171,备用行情-周线,"trade_date, start_date, end_date, ts_code",备用口径周线指标
+bak_monthly,bak_monthly,https://tushare.pro/document/2?doc_id=171,171,备用行情-月线,"trade_date, start_date, end_date, ts_code",备用口径月线指标
+weekly,weekly,https://tushare.pro/document/2?doc_id=27,27,周线行情,"ts_code, start_date, end_date","open, high, low, close, vol, amount"
+monthly,monthly,https://tushare.pro/document/2?doc_id=27,27,月线行情,"ts_code, start_date, end_date","open, high, low, close, vol, amount"
+pro_bar,pro_bar,https://tushare.pro/document/2?doc_id=109,109,通用行情（集成接口，含分钟/复权等）,"ts_code, start_date, end_date, asset, adj, freq, ma 等",按参数返回的行情数据
+stk_mins,stk_mins,https://tushare.pro/document/2?doc_id=370,370,A股历史分钟行情,"ts_code, freq, start_date, end_date","trade_time, open, high, low, close, vol, amount 等"
+rt_min,rt_min,https://tushare.pro/document/2?doc_id=374,374,A股实时分钟行情,"ts_code, freq","trade_time, open, high, low, close, vol, amount 等"
+rt_min_daily,rt_min_daily,https://tushare.pro/document/2?doc_id=374,374,A股当日实时分钟全量行情,"ts_code, freq","trade_time, open, high, low, close, vol, amount 等"
+rt_k,rt_k,https://tushare.pro/document/2?doc_id=372,372,沪深京实时日线行情,ts_code,"name, pre_close, open, high, low, close, vol, amount, num"
+rt_stock_k,rt_stock_k,,,兼容入口：同 rt_k,,
+adj_factor,adj_factor,https://tushare.pro/document/2?doc_id=28,28,复权因子,"ts_code, trade_date, start_date, end_date","ts_code, trade_date, adj_factor"
+suspend_d,suspend_d,https://tushare.pro/document/2?doc_id=31,31,停复牌信息,"ts_code, trade_date, start_date, end_date","ts_code, suspend_date, resume_date, suspend_reason"
+stk_limit,stk_limit,https://tushare.pro/document/2?doc_id=183,183,涨跌停价格,"ts_code, trade_date, start_date, end_date","up_limit, down_limit 等"
+daily_basic,daily_basic,https://tushare.pro/document/2?doc_id=32,32,每日行情指标,"ts_code, trade_date, start_date, end_date, fields","turnover_rate, volume_ratio, pe, pe_ttm, pb, total_mv, circ_mv 等"
+daily_info,daily_info,https://tushare.pro/document/2?doc_id=258,258,市场每日统计（沪深市场成交额/量等合计）,"start_date, end_date","ts_code(如 SH_MARKET/SZ_MARKET), trade_date, vol, amount 等"
+moneyflow,moneyflow,https://tushare.pro/document/2?doc_id=170,170,个股主力资金流向（收盘后更新）,"ts_code, trade_date, start_date, end_date","buy_sm_vol, sell_sm_vol, buy_md_vol, buy_lg_vol, buy_elg_vol, net_mf_vol 等"
+moneyflow_ths,moneyflow_ths,https://tushare.pro/document/2?doc_id=348,348,资金流（同花顺口径）,"ts_code, trade_date, start_date, end_date",不同口径的净流入、净额字段
+moneyflow_dc,moneyflow_dc,https://tushare.pro/document/2?doc_id=349,349,大单成交（资金流明细/大单）,"ts_code, trade_date, start_date, end_date",大单买卖成交与净额
+income,income,https://tushare.pro/document/2?doc_id=33,33,利润表,"ts_code, period, start_date, end_date",营业收入、营业利润、净利润等
+balancesheet,balancesheet,https://tushare.pro/document/2?doc_id=36,36,资产负债表,"ts_code, period, start_date, end_date",资产、负债、所有者权益等
+cashflow,cashflow,https://tushare.pro/document/2?doc_id=44,44,现金流量表,"ts_code, period, start_date, end_date",经营/投资/筹资现金流量等
+fina_indicator,fina_indicator,https://tushare.pro/document/2?doc_id=79,79,财务指标数据,"ts_code, period, start_date, end_date","roe, roa, grossprofit_margin 等"
+fina_audit,fina_audit,https://tushare.pro/document/2?doc_id=80,80,财务审计意见,"ts_code, period, start_date, end_date","audit_result, auditor 等"
+dividend,dividend,https://tushare.pro/document/2?doc_id=103,103,分红送股,"ts_code, end_date, imp_ann_date",分红送转方案等
+forecast,forecast,https://tushare.pro/document/2?doc_id=45,45,业绩预告,"ts_code, period, ann_date",预告类型、变动幅度等
+express,express,https://tushare.pro/document/2?doc_id=46,46,业绩快报,"ts_code, period, ann_date",营收/利润快报等
+fina_mainbz,fina_mainbz,https://tushare.pro/document/2?doc_id=81,81,主营业务构成,"ts_code, period, type","bz_item, bz_sales, bz_profit, bz_cost 等"
+announcement,announcement,https://tushare.pro/document/2?doc_id=176,176,上市公司公告,"ts_code, ann_date, start_date, end_date, category",公告标题、摘要、公告类型、公告链接等
+stk_managers,stk_managers,https://tushare.pro/document/2?doc_id=193,193,管理层信息,"ts_code, ann_date, start_date, end_date","name, gender, edu, title, begin_date, end_date 等"
+stk_rewards,stk_rewards,https://tushare.pro/document/2?doc_id=194,194,管理层薪酬/持股,"ts_code, ann_date, start_date, end_date","name, title, reward, holding 等"
+concept,concept,https://tushare.pro/document/2?doc_id=147,147,概念列表（板块/主题）,src,"code, name, src 等"
+concept_detail,concept_detail,https://tushare.pro/document/2?doc_id=148,148,概念成分明细,"id/code, ts_code","id, ts_code, name, in_date, out_date 等"
+moneyflow_hsgt,moneyflow_hsgt,https://tushare.pro/document/2?doc_id=47,47,沪深港通资金流向（日）,"trade_date, start_date, end_date","north_money, south_money 等"
+hsgt_top10,hsgt_top10,https://tushare.pro/document/2?doc_id=48,48,沪深港通每日前十大成交股,"trade_date, market","ts_code, name, net_amount, buy, sell 等"
+hk_hold,hk_hold,https://tushare.pro/document/2?doc_id=188,188,沪深港通持股明细（港资持股）,"ts_code, trade_date, start_date, end_date","vol, ratio 等"
+ggt_daily,ggt_daily,https://tushare.pro/document/2?doc_id=196,196,港股通每日交易统计,"trade_date, start_date, end_date","hgt_amount, sgt_amount, north_money, south_money 等"
+ggt_top10,ggt_top10,https://tushare.pro/document/2?doc_id=49,49,港股通每日前十大成交股,trade_date,"ts_code, name, net_amount, buy, sell 等"
+ggt_monthly,ggt_monthly,https://tushare.pro/document/2?doc_id=50,50,港股通每月成交统计,month,月度成交情况
+block_trade,block_trade,https://tushare.pro/document/2?doc_id=161,161,大宗交易,"ts_code, trade_date, start_date, end_date","price, vol, amount, buyer, seller 等"
+repurchase,repurchase,https://tushare.pro/document/2?doc_id=124,124,股份回购,"ts_code, ann_date, start_date, end_date",回购方案与进度等
+pledge_stat,pledge_stat,https://tushare.pro/document/2?doc_id=110,110,股权质押统计,ts_code,质押数量、比例等
+pledge_detail,pledge_detail,https://tushare.pro/document/2?doc_id=111,111,股权质押明细,ts_code,质押起始日、数量、质权人等
+stk_holdernumber,stk_holdernumber,https://tushare.pro/document/2?doc_id=166,166,股东户数,"ts_code, enddate, start_date, end_date","enddate, holder_num 等"
+stk_holdertrade,stk_holdertrade,https://tushare.pro/document/2?doc_id=175,175,股东增减持统计,"ts_code, ann_date, start_date, end_date","holder_name, in_de, change_vol, change_ratio 等"
+top10_holders,top10_holders,https://tushare.pro/document/2?doc_id=61,61,前十大股东,"ts_code, period, ann_date","holder_name, hold_ratio, hold_amount 等"
+top10_floatholders,top10_floatholders,https://tushare.pro/document/2?doc_id=62,62,前十大流通股东,"ts_code, period, ann_date","holder_name, hold_ratio, hold_amount 等"
+limit_list_d,limit_list_d,https://tushare.pro/document/2?doc_id=298,298,每日涨跌停与炸板统计,"trade_date, start_date, end_date","ts_code, name, close, pct_change, limit, is_new, first_time, last_time 等"
+top_list,top_list,https://tushare.pro/document/2?doc_id=51,51,龙虎榜每日明细（上榜个股）,"trade_date, ts_code",买卖金额、净额、类型、原因等
+top_inst,top_inst,https://tushare.pro/document/2?doc_id=52,52,龙虎榜机构成交明细,"trade_date, ts_code",机构买卖金额与席位等
+ths_index,ths_index,https://tushare.pro/document/2?doc_id=278,278,同花顺概念/行业指数列表,"ts_code, exchange, type 等","ts_code, name, count, exchange, type 等"
+ths_member,ths_member,https://tushare.pro/document/2?doc_id=279,279,同花顺概念/行业成分明细,ts_code（概念/行业代码）,"ts_code(成分股), name, in_date, out_date 等"
+hk_daily_adj,hk_daily_adj,https://tushare.pro/document/2?doc_id=339,339,港股复权行情（含市值/换手等指标）,"ts_code, start_date, end_date, trade_date","open, high, low, close, vol, amount, turnover_rate 等"
+hk_mins,hk_mins,https://tushare.pro/document/2?doc_id=304,304,港股分钟行情,"ts_code, freq, start_date, end_date","trade_time, open, high, low, close, vol, amount"
+margin,margin,https://tushare.pro/document/2?doc_id=58,58,融资融券汇总（市场级）,"trade_date, start_date, end_date","rzye(融资余额), rzmre(融资买入额), rqye(融券余额), rqmcl(融券卖出量) 等"
+margin_detail,margin_detail,https://tushare.pro/document/2?doc_id=59,59,融资融券明细（个股级）,"ts_code, trade_date, start_date, end_date","rzye, rzmre, rzche, rqye, rqmcl, rqchl 等"
+margin_secs,margin_secs,https://tushare.pro/document/2?doc_id=326,326,融资融券标的（盘前更新）,"trade_date, exchange, ts_code","trade_date, ts_code, name, exchange 等"
+margin_target,margin_target,https://tushare.pro/document/2?doc_id=326  (同 margin_secs),326,融资融券标的列表,"trade_date, exchange",标的证券列表
+margin_target_detail,margin_target_detail,https://tushare.pro/document/2,,融资融券标的明细,"ts_code, trade_date",融资融券标的细项
+margin_target_amt,margin_target_amt,https://tushare.pro/document/2,,融资融券标的额度,"ts_code, trade_date",可融可券额度等
+margin_pledge_stat,margin_pledge_stat,https://tushare.pro/document/2,,融资融券质押统计,trade_date,质押总体情况
+margin_pledge_detail,margin_pledge_detail,https://tushare.pro/document/2,,融资融券质押明细,"trade_date, member_type",质押明细数据
+margin_inter_stat,margin_inter_stat,https://tushare.pro/document/2,,融资融券互联互通统计,trade_date,互联互通统计
+margin_inter_detail,margin_inter_detail,https://tushare.pro/document/2,,融资融券互联互通明细,trade_date,互联互通明细
+margin_collateral,margin_collateral,https://tushare.pro/document/2,,融资融券担保物,trade_date,担保物明细
+stock_account,stock_account,https://tushare.pro/document/2?doc_id=164,164,股票开户数据（新版）,"start_date, end_date","weekly_new, total, weekly_hold, weekly_trade"
+stock_account_old,stock_account_old,https://tushare.pro/document/2,,股票开户数据（旧版）,date,开户数据（老口径）
+broker_recommend,broker_recommend,https://tushare.pro/document/2?doc_id=267,267,券商金股推荐,"month, broker",券商推荐列表
+broker_recommend_detail,broker_recommend_detail,https://tushare.pro/document/2?doc_id=267,267,券商金股推荐明细,"ts_code, month",推荐明细
+report_rc,report_rc,https://tushare.pro/document/2?doc_id=292,292,券商盈利预测数据（研报结构化）,"ts_code, ann_date, start_date, end_date, period","org_name, quarter, eps, roe, pe, pb, rating 等"
+cyq_perf,cyq_perf,https://tushare.pro/document/2?doc_id=293,293,每日筹码平均成本与胜率,"ts_code, start_date, end_date","his_low, his_high, cost_5pct, cost_95pct, weight_avg, winner_rate 等"
+cyq_chips,cyq_chips,https://tushare.pro/document/2?doc_id=294,294,每日筹码分布,"ts_code, start_date, end_date","price, percent 等"
+ccass_hold,ccass_hold,https://tushare.pro/document/2?doc_id=295,295,中央结算系统持股汇总,"ts_code, start_date, end_date","shareholding, hold_nums, hold_ratio 等"
+ccass_hold_detail,ccass_hold_detail,https://tushare.pro/document/2?doc_id=274,274,中央结算系统持股明细,"ts_code, trade_date, start_date, end_date","col_participant_id, col_participant_name, col_shareholding 等"
+stk_factor,stk_factor,https://tushare.pro/document/2?doc_id=296,296,股票每日技术面因子,"ts_code, trade_date, start_date, end_date, fields","macd, kdj_k, kdj_d, kdj_j 等技术指标"
+stk_factor_pro,stk_factor_pro,https://tushare.pro/document/2?doc_id=328,328,股票每日技术面因子（专业版）,"ts_code, trade_date, start_date, end_date, fields",指标字段（含前后复权/多周期因子）
+stk_auction_o,stk_auction_o,https://tushare.pro/document/2?doc_id=353,353,股票开盘集合竞价数据,"trade_date, ts_code","open, high, low, close, vol, amount, vwap 等"
+stk_auction_c,stk_auction_c,https://tushare.pro/document/2?doc_id=354,354,股票收盘集合竞价数据,"trade_date, ts_code","close, high, low, vol, amount, vwap 等"
+shhk_daily,shhk_daily,https://tushare.pro/document/2?doc_id=399,399,沪深港通指数日度指标,"trade_date, start_date, end_date, market","north_money, south_money, prem_ratio, ah_p 等"
+stk_nineturn,stk_nineturn,https://tushare.pro/document/2?doc_id=364,364,神奇九转指标,"ts_code, freq, trade_date, start_date, end_date, fields","up_count, down_count, nine_up_turn, nine_down_turn 等"
+stk_ah_comparison,stk_ah_comparison,https://tushare.pro/document/2?doc_id=399,399,AH股比价,"trade_date, ts_code, hk_code, start_date, end_date","ah_comparison, ah_premium, hk_close, close 等"
+stk_surv,stk_surv,https://tushare.pro/document/2?doc_id=275,275,机构调研数据,"ts_code, trade_date, start_date, end_date, fields","surv_date, fund_visitors, rece_place, rece_mode, rece_org 等"
+stock_mx,stock_mx,https://tushare.pro/document/2?doc_id=300,300,动能因子数据,"ts_code, trade_date, start_date, end_date","mx_grade, com_stock, evd_v, zt_sum_z, wma250_z 等"
+share_float,share_float,https://tushare.pro/document/2?doc_id=108  (若具体 doc_id 以官方为准),108,限售股解禁/流通股本变动,"ts_code, start_date, end_date","float_date, float_share, reason 等"
+float_share,float_share,https://tushare.pro/document/2  (以实际子页为准),,流通股本变动（另一口径，如有）,"ts_code, start_date, end_date","float_date, float_share 等"
+stk_premarket,stk_premarket,https://tushare.pro/document/2?doc_id=329,329,盘前股本情况,trade_date,"total_share, float_share, pre_close, up_limit, down_limit 等"
+stk_restrict,stk_restrict,https://tushare.pro/document/2  (以实际子页为准),,限售股解禁计划,"ts_code, end_date, start_date","restric_type, restric_share, restric_ratio, ann_date, float_date 等"
+hs_const,hs_const,https://tushare.pro/document/2?doc_id=104,104,沪深股通成份股,"hs_type (SH/SZ), is_new","ts_code, hs_type, in_date, out_date, is_new 等"
+index_basic,index_basic,https://tushare.pro/document/2?doc_id=94,94,指数基础信息,"market, publisher, category 等","ts_code, name, fullname, market, publisher, category"
+index_daily,index_daily,https://tushare.pro/document/2?doc_id=95,95,指数日线,"ts_code, trade_date, start_date, end_date","open, high, low, close, pre_close, change, pct_chg, vol, amount"
+index_dailybasic,index_dailybasic,https://tushare.pro/document/2?doc_id=96,96,指数每日指标,"ts_code, trade_date, start_date, end_date","turnover_rate, turnover_rate_f, pe, pe_ttm, pb, total_mv, float_mv, free_share"
+index_weight,index_weight,https://tushare.pro/document/2?doc_id=97,97,指数成分权重,"index_code, trade_date, start_date, end_date","index_code, con_code, trade_date, weight"
+index_classify,index_classify,https://tushare.pro/document/2  (以实际子页为准),,指数分类/列表（扩展）,"src, category, market 等",根据文档为准
+index_member,index_member,https://tushare.pro/document/2  (以实际子页为准),,指数成分明细（便于获取成分股列表）,"index_code, trade_date","index_code, con_code, in_date, out_date 等"
+index_weekly,index_weekly,https://tushare.pro/document/2  (以实际子页为准),,指数周线,"ts_code, start_date, end_date","open, high, low, close, vol, amount"
+index_monthly,index_monthly,https://tushare.pro/document/2  (以实际子页为准),,指数月线,"ts_code, start_date, end_date","open, high, low, close, vol, amount"
+fund_basic,fund_basic,https://tushare.pro/document/2?doc_id=43,43,基金基础信息（可用于筛选 ETF）,,"ts_code, name, fund_type, market, list_date 等"
+fund_daily,fund_daily,https://tushare.pro/document/2?doc_id=185,185,基金/ETF 日线行情,"ts_code, trade_date, start_date, end_date","open, high, low, close, vol, amount"
+rt_etf_k,rt_etf_k,https://tushare.pro/document/2?doc_id=400,400,ETF 实时日线行情,"ts_code, topic",实时 ETF 日线 K 数据
+fund_nav,fund_nav,https://tushare.pro/document/2?doc_id=44  (若 ETF 专题另有专用文档，以专用为准),44,基金净值（部分 ETF 提供/取决于文档）,"ts_code, nav_date, start_date, end_date","ts_code, nav, accum_nav 等"
+fund_div,fund_div,https://tushare.pro/document/2  (以实际子页为准),,基金分红信息（ETF/基金）,"ts_code, ann_date, record_date, ex_date",分红方案、每份分红、登记/除权日期等
+fund_portfolio,fund_portfolio,https://tushare.pro/document/2?doc_id=47  (示意：请以实际 ETF 持仓接口文档为准),47,基金/ETF 持仓（若 ETF 专题提供相应表，以其为准）,"ts_code, period",持仓明细
+fund_adj,fund_adj,https://tushare.pro/document/2  (以实际子页为准),,基金/ETF 复权因子,"ts_code, trade_date, start_date, end_date",adj_factor 等
+fund_share,fund_share,https://tushare.pro/document/2  (以实际子页为准),,基金份额变动（部分 ETF 适用）,"ts_code, start_date, end_date","trade_date, share, change 等"
+fund_company,fund_company,https://tushare.pro/document/2  (以实际子页为准),,基金公司,"name, fields",基金公司信息
+fund_manager,fund_manager,https://tushare.pro/document/2  (以实际子页为准),,基金经理信息,"ts_code, mger_name",任职时间、管理基金等
+llm_corpus,llm_corpus,,,大模型语料专题的统一入口（占位）,,

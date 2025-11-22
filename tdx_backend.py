@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 
 import psycopg2
 import psycopg2.extras as pgx
+from psycopg2.pool import SimpleConnectionPool
 from fastapi import FastAPI, HTTPException, Path, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -36,6 +37,18 @@ from data_source_manager import data_source_manager
 pgx.register_uuid()
 
 load_dotenv(override=True)
+HOTBOARD_PERF = os.getenv("HOTBOARD_PERF_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
+
+# Global connection pool for this backend process only (web/UI layer).
+# Batch ingestion scripts keep using their own psycopg2 connections.
+_DB_POOL: SimpleConnectionPool | None = None
+
+
+def _perf_log_hotboard(name: str, **kwargs: Any) -> None:
+    if not HOTBOARD_PERF:
+        return
+    parts = " ".join(f"{k}={v}" for k, v in kwargs.items())
+    print(f"[PERF hotboard:{name}] {parts}")
 API_TITLE = "TDX Scheduling Backend"
 API_VERSION = "0.1.0"
 DEFAULT_TRIGGERED_BY = "api"
@@ -65,22 +78,80 @@ def _isoformat(value: Optional[dt.datetime]) -> Optional[str]:
         return value.replace(tzinfo=dt.timezone.utc).isoformat()
     return value.astimezone(dt.timezone.utc).isoformat()
 
+def _db_cfg() -> dict:
+    """Build DB config from env/DEFAULT_DB_CFG.
 
-@contextmanager
-def get_conn():
-    db_cfg = {
+    单独封装便于在直连和连接池两种模式下复用。"""
+
+    return {
         "host": os.getenv("TDX_DB_HOST", DEFAULT_DB_CFG["host"]),
         "port": int(os.getenv("TDX_DB_PORT", DEFAULT_DB_CFG["port"])),
         "user": os.getenv("TDX_DB_USER", DEFAULT_DB_CFG["user"]),
         "password": os.getenv("TDX_DB_PASSWORD", DEFAULT_DB_CFG["password"]),
         "dbname": os.getenv("TDX_DB_NAME", DEFAULT_DB_CFG["dbname"]),
     }
-    conn = psycopg2.connect(**db_cfg)
-    conn.autocommit = True
+
+
+def init_db_pool(minconn: int = 1, maxconn: int = 10) -> None:
+    """Initialize global psycopg2 connection pool for this backend process.
+
+    仅在 Web/FastAPI 进程中使用连接池，批量入库脚本保持原有直连模式。
+    """
+
+    global _DB_POOL
+    if _DB_POOL is not None:
+        return
+    cfg = _db_cfg()
     try:
+        _DB_POOL = SimpleConnectionPool(minconn, maxconn, **cfg)
+    except Exception as exc:  # noqa: BLE001
+        # 若连接池初始化失败，为避免服务整体不可用，退回到按需直连模式。
+        print(f"[DB] init_db_pool failed, fallback to direct connect: {exc}")
+        _DB_POOL = None
+
+
+def close_db_pool() -> None:
+    """Close all connections in the global pool (if any)."""
+
+    global _DB_POOL
+    if _DB_POOL is not None:
+        try:
+            _DB_POOL.closeall()
+        except Exception:
+            pass
+        _DB_POOL = None
+
+
+@contextmanager
+def get_conn():
+    """Yield a DB connection, using pool when available.
+
+    - Web/UI 层优先使用全局连接池，减少建连开销、限制最大连接数；
+    - 若池未初始化或初始化失败，则退回到临时直连模式，保持兼容性。
+    """
+
+    global _DB_POOL
+
+    if _DB_POOL is None:
+        # Fallback: one-off connection, behaviour与原实现一致。
+        conn = psycopg2.connect(**_db_cfg())
+        conn.autocommit = True
+        try:
+            yield conn
+        finally:
+            conn.close()
+        return
+
+    conn = _DB_POOL.getconn()
+    try:
+        conn.autocommit = True
         yield conn
     finally:
-        conn.close()
+        try:
+            _DB_POOL.putconn(conn)
+        except Exception:
+            # 若 put 失败，不影响主流程，连接由池自行回收或丢弃。
+            pass
 
 
 def _fetchall(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
@@ -281,6 +352,28 @@ def _job_status(job_id: uuid.UUID) -> Dict[str, Any]:
         (job_id,),
     )
     logs = [str(r.get("message")) for r in (log_rows or []) if r.get("message") is not None]
+    # small sample of errors for UI to show failure reasons and affected codes/dates
+    error_rows = _fetchall(
+        """
+        SELECT e.run_id, e.ts_code, e.message, e.detail
+          FROM market.ingestion_errors e
+          JOIN market.ingestion_runs r ON r.run_id = e.run_id
+         WHERE r.params->>'job_id' = %s
+         ORDER BY e.run_id, e.ts_code
+         LIMIT 20
+        """,
+        (str(job_id),),
+    )
+    error_samples = []
+    for r in error_rows or []:
+        error_samples.append(
+            {
+                "run_id": str(r.get("run_id")),
+                "ts_code": r.get("ts_code"),
+                "message": r.get("message"),
+                "detail": r.get("detail"),
+            }
+        )
     # Extract inserted_rows from summary (root) or nested stats
     stats = summary.get("stats") or {}
     inserted_rows = int(summary.get("inserted_rows") or stats.get("inserted_rows") or 0)
@@ -305,6 +398,7 @@ def _job_status(job_id: uuid.UUID) -> Dict[str, Any]:
         "progress": percent,
         "counters": counters,
         "logs": logs,
+        "error_samples": error_samples,
     }
 
 
@@ -626,6 +720,12 @@ def get_app() -> FastAPI:
     @app.on_event("startup")
     def _startup() -> None:  # noqa: D401
         """Start the background scheduler on service boot."""
+        # Initialize DB connection pool for this backend process
+        try:
+            init_db_pool(minconn=1, maxconn=10)
+        except Exception:
+            # Pool init failure is non-fatal; code will fall back to direct connections.
+            pass
         scheduler.start()
         if (os.getenv("TDX_CREATE_DEFAULT_SCHEDULES", "0").lower() in {"1", "true", "yes", "on"}):
             try:
@@ -648,6 +748,11 @@ def get_app() -> FastAPI:
         scheduler.shutdown(wait=False)
         try:
             _hotboard_stop.set()
+        except Exception:
+            pass
+        # Close DB connection pool if any
+        try:
+            close_db_pool()
         except Exception:
             pass
 
@@ -771,7 +876,12 @@ def get_app() -> FastAPI:
     def _ensure_default_ingestion_schedules() -> List[Dict[str, Any]]:
         defaults = [
             ("kline_daily_qfq", "incremental", "daily", True, {}),
+            ("kline_daily_raw", "incremental", "daily", True, {}),
             ("kline_minute_raw", "incremental", "10m", True, {}),
+            # Tushare 个股资金流增量，同步逻辑由脚本内部根据 trade_date 游标推进
+            ("stock_moneyflow", "incremental", "daily", True, {}),
+            # Weekly aggregation from daily QFQ，默认按日检查是否有新日线可聚合
+            ("kline_weekly", "incremental", "daily", True, {}),
         ]
         items: List[Dict[str, Any]] = []
         for ds, md, freq, en, opts in defaults:
@@ -822,29 +932,10 @@ def get_app() -> FastAPI:
         summary = {"dataset": payload.dataset, "mode": payload.mode, **(payload.options or {})}
         job_type = "init" if payload.mode == "init" else "incremental"
         job_id = _create_job(job_type, summary)
-        opts = dict(payload.options or {})
-        opts["job_id"] = str(job_id)
-        run_id = scheduler.run_ingestion_now(
-            dataset=payload.dataset,
-            mode=payload.mode,
-            triggered_by=payload.triggered_by,
-            options=opts,
-        )
-        return {"run_id": str(run_id), "job_id": str(job_id)}
-
-    @app.post("/api/adjust/rebuild")
-    def trigger_adjust_rebuild(payload: AdjustRebuildRequest) -> Dict[str, Any]:
         options = dict(payload.options or {})
-        summary = {"dataset": "adjust_daily", "mode": "rebuild", **options}
-        job_id = _create_job("init", summary)
         options["job_id"] = str(job_id)
-        run_id = scheduler.run_ingestion_now(
-            dataset="adjust_daily",
-            mode="rebuild",
-            triggered_by="api",
-            options=options,
-        )
-        return {"run_id": str(run_id), "job_id": str(job_id)}
+        run_id = scheduler.run_ingestion_now(dataset=payload.dataset, mode=payload.mode, triggered_by="api", options=options)
+        return {"job_id": str(job_id), "run_id": str(run_id)}
 
     @app.get("/api/ingestion/schedule")
     def list_ingestion_schedules() -> Dict[str, Any]:
@@ -950,6 +1041,52 @@ def get_app() -> FastAPI:
         return {"items": [_serialize_ingestion_log(row) for row in rows]}
 
     # ------------------------------------------------------------------
+    # Data statistics endpoints (local DB dashboard)
+
+    @app.post("/api/data-stats/refresh")
+    def refresh_data_stats() -> Dict[str, Any]:
+        """Trigger data statistics refresh via market.refresh_data_stats().
+
+        该接口调用数据库中的存储过程，对已配置的数据表进行统计并
+        更新 market.data_stats 表。前端“数据看板”应在刷新成功后重新
+        调用 /api/data-stats 获取最新统计信息。
+        """
+
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT market.refresh_data_stats();")
+            return {"success": True}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"refresh_data_stats failed: {exc}") from exc
+
+    @app.get("/api/data-stats")
+    def list_data_stats() -> Dict[str, Any]:
+        """List current data statistics from market.data_stats.
+
+        仅从统计表读取数据，不直接扫描业务大表，便于在页面中快速展示
+        各类数据的时间范围、行数和空间占用等信息。
+        """
+
+        rows = _fetchall(
+            """
+            SELECT data_kind,
+                   table_name,
+                   min_date,
+                   max_date,
+                   row_count,
+                   table_bytes,
+                   index_bytes,
+                   last_updated_at,
+                   stat_generated_at,
+                   extra_info
+              FROM market.data_stats
+             ORDER BY data_kind
+            """
+        )
+        return {"items": rows}
+
+    # ------------------------------------------------------------------
     # Hotboard endpoints
     class CollectorConfig(BaseModel):
         enabled: Optional[bool] = None
@@ -1023,6 +1160,7 @@ def get_app() -> FastAPI:
 
     @app.get("/api/hotboard/realtime")
     def hotboard_realtime(metric: str = "combo", alpha: float = 0.5, cate_type: Optional[int] = None, at: Optional[str] = None) -> Dict[str, Any]:
+        t0 = time.perf_counter()
         the_ts = None
         if at:
             try:
@@ -1032,12 +1170,15 @@ def get_app() -> FastAPI:
         if the_ts is None:
             the_ts = _latest_intraday_ts()
         if the_ts is None:
+            t_end = time.perf_counter()
+            _perf_log_hotboard("realtime", lookup_ms=round((t_end - t0) * 1000, 1), rows=0)
             return {"ts": None, "items": []}
         where = "WHERE ts=%s"
         params: List[Any] = [the_ts]
         if cate_type is not None:
             where += " AND cate_type=%s"
             params.append(int(cate_type))
+        t1 = time.perf_counter()
         rows = _fetchall(
             f"""
             SELECT cate_type, board_code, board_name, pct_chg, amount, net_inflow, turnover, ratioamount
@@ -1047,6 +1188,7 @@ def get_app() -> FastAPI:
             """,
             tuple(params),
         )
+        t2 = time.perf_counter()
         # compute visual score
         chg = [float(r.get("pct_chg") or 0.0) for r in rows]
         flow = [float(r.get("net_inflow") or 0.0) for r in rows]
@@ -1064,6 +1206,15 @@ def get_app() -> FastAPI:
                 score.append(a * nz_chg[i] + (1 - a) * nz_flow[i])
         for i, r in enumerate(rows):
             r["score"] = score[i]
+        t3 = time.perf_counter()
+        _perf_log_hotboard(
+            "realtime",
+            lookup_ms=round((t1 - t0) * 1000, 1),
+            query_ms=round((t2 - t1) * 1000, 1),
+            score_ms=round((t3 - t2) * 1000, 1),
+            total_ms=round((t3 - t0) * 1000, 1),
+            rows=len(rows),
+        )
         return {"ts": _isoformat(the_ts), "items": rows}
 
     @app.get("/api/hotboard/realtime/timestamps")
@@ -1092,6 +1243,7 @@ def get_app() -> FastAPI:
         if cate_type is not None:
             where += " AND cate_type=%s"
             params.append(int(cate_type))
+        t0 = time.perf_counter()
         rows = _fetchall(
             f"""
             SELECT trade_date, cate_type, board_code, board_name, pct_chg, amount, net_inflow, turnover, ratioamount
@@ -1100,6 +1252,12 @@ def get_app() -> FastAPI:
             ORDER BY cate_type ASC, board_code ASC
             """,
             tuple(params),
+        )
+        t1 = time.perf_counter()
+        _perf_log_hotboard(
+            "daily",
+            query_ms=round((t1 - t0) * 1000, 1),
+            rows=len(rows),
         )
         return {"date": date, "items": rows}
 
@@ -1114,7 +1272,7 @@ def get_app() -> FastAPI:
         return {"items": types}
 
     @app.get("/api/hotboard/tdx/daily")
-    def tdx_board_daily(date: str, idx_type: Optional[str] = None) -> Dict[str, Any]:
+    def tdx_board_daily(date: str, idx_type: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
         # Join to the latest index row per ts_code (<= date) to avoid empty results when index table lacks same-date rows
         params: List[Any] = [date, date]
         where_extra = ""
@@ -1136,9 +1294,18 @@ def get_app() -> FastAPI:
              WHERE d.trade_date = %s
             """ + where_extra + """
              ORDER BY i2.idx_type, d.amount DESC NULLS LAST
+             LIMIT %s
             """
         )
+        t0 = time.perf_counter()
+        params.append(max(1, int(limit)))
         rows = _fetchall(sql, tuple(params))
+        t1 = time.perf_counter()
+        _perf_log_hotboard(
+            "tdx_daily",
+            query_ms=round((t1 - t0) * 1000, 1),
+            rows=len(rows),
+        )
         return {"date": date, "items": rows}
 
     @app.get("/api/hotboard/top-stocks/realtime")
@@ -1151,6 +1318,7 @@ def get_app() -> FastAPI:
         # gather membership (up to a few pages)
         stocks: List[Dict[str, Any]] = []
         page = 1
+        t0 = time.perf_counter()
         while page <= 5 and len(stocks) < max(200, limit):
             part = _sina_concept_stocks(board_code, page=page, num=200)
             if not part:
@@ -1159,16 +1327,21 @@ def get_app() -> FastAPI:
             if len(part) < 200:
                 break
             page += 1
+        t1 = time.perf_counter()
         # build TDX metrics per code
         enriched: List[Dict[str, Any]] = []
+        quote_calls = 0
         for s in stocks:
             code6 = str(s.get("code") or s.get("symbol") or "").split(".")[-1]
             if not code6 or len(code6) != 6:
                 continue
+
+            # 实时行情
             try:
                 q = data_source_manager.get_realtime_quotes(code6)
             except Exception:
                 q = {}
+            quote_calls += 1
             price = q.get("price")
             pre_close = q.get("pre_close")
             pct = None
@@ -1178,9 +1351,22 @@ def get_app() -> FastAPI:
                 except Exception:
                     pct = None
             amount = q.get("amount")
+
+            # 名称分级：s.name / s.ts_name -> data_source_manager -> 最后才退回代码
+            name = s.get("name") or s.get("ts_name")
+            if not name:
+                try:
+                    sec = data_source_manager.get_security_name_and_type(code6)
+                except Exception:
+                    sec = None
+                if isinstance(sec, dict) and sec.get("name"):
+                    name = sec.get("name")
+            if not name:
+                name = code6
+
             enriched.append({
                 "code": code6,
-                "name": s.get("name") or s.get("ts_name") or code6,
+                "name": name,
                 "pct_change": pct,
                 "amount": amount,
                 "open": q.get("open"),
@@ -1189,6 +1375,7 @@ def get_app() -> FastAPI:
                 "low": q.get("low"),
                 "volume": q.get("volume"),
             })
+        t2 = time.perf_counter()
         # rank
         m = (metric or "chg").lower()
         def _key(it: Dict[str, Any]) -> float:
@@ -1197,11 +1384,23 @@ def get_app() -> FastAPI:
             except Exception:
                 return -1e18
         ranked = sorted(enriched, key=_key, reverse=True)[: max(1, int(limit))]
+        t3 = time.perf_counter()
+        _perf_log_hotboard(
+            "top_realtime",
+            sina_ms=round((t1 - t0) * 1000, 1),
+            quotes_ms=round((t2 - t1) * 1000, 1),
+            rank_ms=round((t3 - t2) * 1000, 1),
+            total_ms=round((t3 - t0) * 1000, 1),
+            stocks=len(stocks),
+            quote_calls=quote_calls,
+            returned=len(ranked),
+        )
         return {"items": ranked}
 
     @app.get("/api/hotboard/top-stocks/tdx")
     def top_stocks_tdx(board_code: str, date: str, metric: str = "chg", limit: int = 20) -> Dict[str, Any]:
         # membership on the date
+        t0 = time.perf_counter()
         mem = _fetchall(
             """
             SELECT con_code FROM market.tdx_board_member
@@ -1211,6 +1410,13 @@ def get_app() -> FastAPI:
         )
         codes = [r.get("con_code") for r in mem if r.get("con_code")]
         if not codes:
+            t_end = time.perf_counter()
+            _perf_log_hotboard(
+                "top_tdx",
+                membership_ms=round((t_end - t0) * 1000, 1),
+                codes=0,
+                rows=0,
+            )
             return {"items": []}
         # join daily kline for the date (use qfq as reference)
         # compute intraday change using open/close when pre_close unavailable
@@ -1221,10 +1427,12 @@ def get_app() -> FastAPI:
              WHERE k.trade_date=%s AND k.ts_code = ANY(%s)
         """
         rows = []
+        t1 = time.perf_counter()
         with get_conn() as conn:
             with conn.cursor(cursor_factory=pgx.RealDictCursor) as cur:
                 cur.execute(sql, (date, where_codes))
                 rows = [dict(r) for r in cur.fetchall()]
+        t2 = time.perf_counter()
         items: List[Dict[str, Any]] = []
         for r in rows:
             try:
@@ -1246,6 +1454,17 @@ def get_app() -> FastAPI:
                 continue
         key = (lambda x: (x.get("pct_chg") or -1e9)) if metric == "chg" else (lambda x: (x.get("amount") or 0.0))
         items = sorted(items, key=key, reverse=True)[: max(1, int(limit))]
+        t3 = time.perf_counter()
+        _perf_log_hotboard(
+            "top_tdx",
+            membership_ms=round((t1 - t0) * 1000, 1),
+            query_ms=round((t2 - t1) * 1000, 1),
+            score_ms=round((t3 - t2) * 1000, 1),
+            total_ms=round((t3 - t0) * 1000, 1),
+            codes=len(codes),
+            rows=len(rows),
+            returned=len(items),
+        )
         return {"date": date, "board_code": board_code, "items": items}
 
     # ------------------------------------------------------------------

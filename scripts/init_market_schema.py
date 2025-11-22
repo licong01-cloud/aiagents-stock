@@ -156,6 +156,35 @@ STATEMENTS = [
         PRIMARY KEY (code, trade_date)
     );
     """,
+    # Tushare stock moneyflow (moneyflow_ind_dc) for indicator screening
+    """
+    CREATE TABLE IF NOT EXISTS market.moneyflow_ind_dc (
+        trade_date DATE NOT NULL,
+        ts_code    CHAR(9) NOT NULL,          -- TS 股票代码
+        buy_elg_vol      NUMERIC(20,4),       -- 超大单买入量
+        buy_elg_amount   NUMERIC(28,2),       -- 超大单买入金额
+        sell_elg_vol     NUMERIC(20,4),       -- 超大单卖出量
+        sell_elg_amount  NUMERIC(28,2),       -- 超大单卖出金额
+        net_elg_amount   NUMERIC(28,2),       -- 超大单净额
+        buy_lg_vol       NUMERIC(20,4),       -- 大单买入量
+        buy_lg_amount    NUMERIC(28,2),       -- 大单买入金额
+        sell_lg_vol      NUMERIC(20,4),       -- 大单卖出量
+        sell_lg_amount   NUMERIC(28,2),       -- 大单卖出金额
+        net_lg_amount    NUMERIC(28,2),       -- 大单净额
+        buy_md_vol       NUMERIC(20,4),       -- 中单买入量
+        buy_md_amount    NUMERIC(28,2),       -- 中单买入金额
+        sell_md_vol      NUMERIC(20,4),       -- 中单卖出量
+        sell_md_amount   NUMERIC(28,2),       -- 中单卖出金额
+        net_md_amount    NUMERIC(28,2),       -- 中单净额
+        buy_sm_vol       NUMERIC(20,4),       -- 小单买入量
+        buy_sm_amount    NUMERIC(28,2),       -- 小单买入金额
+        sell_sm_vol      NUMERIC(20,4),       -- 小单卖出量
+        sell_sm_amount   NUMERIC(28,2),       -- 小单卖出金额
+        net_sm_amount    NUMERIC(28,2),       -- 小单净额
+        total_value_traded NUMERIC(28,2),     -- 成交额（可选汇总列）
+        PRIMARY KEY (ts_code, trade_date)
+    );
+    """,
     # Snapshots
     """
     CREATE TABLE IF NOT EXISTS market.stock_info (
@@ -439,6 +468,7 @@ HYPERTABLE_SQL = [
     "SELECT create_hypertable('market.kline_monthly_qfq', 'month_end_date', if_not_exists => TRUE);",
     "SELECT create_hypertable('market.kline_daily_raw', 'trade_date', if_not_exists => TRUE);",
     "SELECT create_hypertable('market.kline_daily_hfq', 'trade_date', if_not_exists => TRUE);",
+    "SELECT create_hypertable('market.moneyflow_ind_dc', 'trade_date', partitioning_column => 'ts_code', if_not_exists => TRUE);",
     "SELECT create_hypertable('market.kline_minute_raw', 'trade_time', partitioning_column => 'ts_code', number_partitions => 16, chunk_time_interval => INTERVAL '1 day', if_not_exists => TRUE);",
     "SELECT create_hypertable('market.tick_trade_raw', 'trade_time', if_not_exists => TRUE);",
     "SELECT create_hypertable('market.index_kline_daily_qfq', 'trade_date', if_not_exists => TRUE);",
@@ -454,6 +484,7 @@ INDEX_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_kline_daily_hfq_ts ON market.kline_daily_hfq (ts_code, trade_date DESC);",
     "CREATE INDEX IF NOT EXISTS idx_kline_weekly_ts ON market.kline_weekly_qfq (ts_code, week_end_date DESC);",
     "CREATE INDEX IF NOT EXISTS idx_kline_monthly_ts ON market.kline_monthly_qfq (ts_code, month_end_date DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_moneyflow_ind_dc_ts ON market.moneyflow_ind_dc (ts_code, trade_date DESC);",
     "CREATE INDEX IF NOT EXISTS idx_kline_daily_code ON market.kline_daily_qfq (ts_code);",
     "CREATE INDEX IF NOT EXISTS idx_kline_daily_raw_code ON market.kline_daily_raw (ts_code);",
     "CREATE INDEX IF NOT EXISTS idx_kline_daily_hfq_code ON market.kline_daily_hfq (ts_code);",
@@ -480,6 +511,7 @@ COMPRESSION_SQL = [
     "ALTER TABLE market.kline_daily_qfq SET (timescaledb.compress, timescaledb.compress_orderby='trade_date', timescaledb.compress_segmentby='ts_code');",
     "ALTER TABLE market.kline_daily_raw SET (timescaledb.compress, timescaledb.compress_orderby='trade_date', timescaledb.compress_segmentby='ts_code');",
     "ALTER TABLE market.kline_daily_hfq SET (timescaledb.compress, timescaledb.compress_orderby='trade_date', timescaledb.compress_segmentby='ts_code');",
+    "ALTER TABLE market.moneyflow_ind_dc SET (timescaledb.compress, timescaledb.compress_orderby='trade_date', timescaledb.compress_segmentby='ts_code');",
     "ALTER TABLE market.kline_weekly_qfq SET (timescaledb.compress, timescaledb.compress_orderby='week_end_date', timescaledb.compress_segmentby='ts_code');",
     "ALTER TABLE market.kline_monthly_qfq SET (timescaledb.compress, timescaledb.compress_orderby='month_end_date', timescaledb.compress_segmentby='ts_code');",
     "ALTER TABLE market.index_kline_daily_qfq SET (timescaledb.compress, timescaledb.compress_orderby='trade_date', timescaledb.compress_segmentby='code');",
@@ -494,6 +526,7 @@ COMPRESSION_POLICY_SQL = [
     "SELECT add_compression_policy('market.kline_daily_hfq', INTERVAL '30 days', if_not_exists => TRUE);",
     "SELECT add_compression_policy('market.kline_weekly_qfq', INTERVAL '30 days', if_not_exists => TRUE);",
     "SELECT add_compression_policy('market.kline_monthly_qfq', INTERVAL '30 days', if_not_exists => TRUE);",
+    "SELECT add_compression_policy('market.moneyflow_ind_dc', INTERVAL '30 days', if_not_exists => TRUE);",
     "SELECT add_compression_policy('market.index_kline_daily_qfq', INTERVAL '30 days', if_not_exists => TRUE);",
     "SELECT add_compression_policy('market.tdx_board_daily', INTERVAL '30 days', if_not_exists => TRUE);",
 ]
@@ -506,6 +539,7 @@ RETENTION_POLICY_SQL = [
     "SELECT add_retention_policy('market.kline_daily_hfq', INTERVAL '20 years', if_not_exists => TRUE);",
     "SELECT add_retention_policy('market.kline_weekly_qfq', INTERVAL '20 years', if_not_exists => TRUE);",
     "SELECT add_retention_policy('market.kline_monthly_qfq', INTERVAL '20 years', if_not_exists => TRUE);",
+    "SELECT add_retention_policy('market.moneyflow_ind_dc', INTERVAL '10 years', if_not_exists => TRUE);",
     "SELECT add_retention_policy('market.index_kline_daily_qfq', INTERVAL '20 years', if_not_exists => TRUE);",
     "SELECT add_retention_policy('market.tdx_board_daily', INTERVAL '20 years', if_not_exists => TRUE);",
 ]

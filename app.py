@@ -22,6 +22,8 @@ from main_force_ui import display_main_force_selector
 from sector_strategy_ui import display_sector_strategy
 from longhubang_ui import display_longhubang
 from smart_monitor_ui import smart_monitor_ui
+from indicator_screening_ui import display_indicator_screening
+from cloud_screening_ui import display_cloud_screening
 from unified_data_access import unified_data_access as udao
 from network_optimizer import network_optimizer, NetworkOptimizer
 from debug_logger import debug_logger, safe_index
@@ -304,7 +306,7 @@ def main():
             # 清除所有功能页面标志
             for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
                        'show_sector_strategy', 'show_longhubang', 'show_portfolio', 'show_local_data',
-                       'show_smart_monitor', 'show_watchlist']:
+                       'show_smart_monitor', 'show_watchlist', 'show_hotboard']:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
@@ -330,14 +332,34 @@ def main():
             if st.button("⭐ 自选股票池", width='stretch', key="nav_watchlist", help="管理自选股票池"):
                 st.session_state.show_watchlist = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_sector_strategy',
-                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor', 'show_main_force']:
+                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor', 'show_main_force', 'show_hotboard', 'show_indicator_screening', 'show_cloud_screening']:
                     if key in st.session_state:
                         del st.session_state[key]
+
+            # 指标选股入口（本地数据 + Tushare 策略）
+            if st.button("📊 指标选股", width='stretch', key="nav_indicator_screening", help="基于多指标与资金流的开盘策略选股"):
+                st.session_state.show_indicator_screening = True
+                for key in ['show_history', 'show_monitor', 'show_config', 'show_sector_strategy',
+                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor',
+                           'show_main_force', 'show_hotboard', 'show_watchlist', 'show_cloud_screening']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
+
+            # 云选股入口（东财智能选股）
+            if st.button("☁ 云选股", width='stretch', key="nav_cloud_screening", help="调用东方财富智能选股接口"):
+                st.session_state.show_cloud_screening = True
+                for key in ['show_history', 'show_monitor', 'show_config', 'show_sector_strategy',
+                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor',
+                           'show_main_force', 'show_hotboard', 'show_watchlist', 'show_indicator_screening']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
 
             if st.button("💰 主力选股", width='stretch', key="nav_main_force", help="基于主力资金流向的选股策略"):
                 st.session_state.show_main_force = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_sector_strategy',
-                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor', 'show_watchlist']:
+                           'show_longhubang', 'show_portfolio', 'show_local_data', 'show_smart_monitor', 'show_watchlist', 'show_hotboard']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -349,7 +371,7 @@ def main():
             if st.button("🎯 智策板块", width='stretch', key="nav_sector_strategy", help="AI板块策略分析"):
                 st.session_state.show_sector_strategy = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_longhubang', 'show_portfolio', 'show_smart_monitor', 'show_local_data', 'show_watchlist']:
+                           'show_longhubang', 'show_portfolio', 'show_smart_monitor', 'show_local_data', 'show_watchlist', 'show_hotboard']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -357,7 +379,7 @@ def main():
             if st.button("🐉 智瞰龙虎", width='stretch', key="nav_longhubang", help="龙虎榜深度分析"):
                 st.session_state.show_longhubang = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_sector_strategy', 'show_portfolio', 'show_smart_monitor', 'show_local_data', 'show_watchlist']:
+                           'show_sector_strategy', 'show_portfolio', 'show_smart_monitor', 'show_local_data', 'show_watchlist', 'show_hotboard']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -369,7 +391,7 @@ def main():
             if st.button("📊 持仓分析", width='stretch', key="nav_portfolio", help="投资组合分析与定时跟踪"):
                 st.session_state.show_portfolio = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_sector_strategy', 'show_longhubang', 'show_smart_monitor', 'show_local_data', 'show_watchlist']:
+                           'show_sector_strategy', 'show_longhubang', 'show_smart_monitor', 'show_local_data', 'show_watchlist', 'show_hotboard']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -377,7 +399,7 @@ def main():
             if st.button("🤖 AI盯盘", width='stretch', key="nav_smart_monitor", help="DeepSeek AI自动盯盘决策交易（支持A股T+1）"):
                 st.session_state.show_smart_monitor = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                           'show_sector_strategy', 'show_longhubang', 'show_portfolio', 'show_local_data', 'show_watchlist']:
+                           'show_sector_strategy', 'show_longhubang', 'show_portfolio', 'show_local_data', 'show_watchlist', 'show_hotboard']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -385,7 +407,7 @@ def main():
             if st.button("📡 实时监测", width='stretch', key="nav_monitor", help="价格监控与预警提醒"):
                 st.session_state.show_monitor = True
                 for key in ['show_history', 'show_main_force', 'show_longhubang', 'show_portfolio',
-                           'show_config', 'show_sector_strategy', 'show_smart_monitor', 'show_local_data', 'show_watchlist']:
+                           'show_config', 'show_sector_strategy', 'show_smart_monitor', 'show_local_data', 'show_watchlist', 'show_hotboard']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
@@ -524,6 +546,16 @@ def main():
         display_main_force_selector()
         return
 
+    # 检查是否显示云选股
+    if 'show_cloud_screening' in st.session_state and st.session_state.show_cloud_screening:
+        display_cloud_screening()
+        return
+
+    # 检查是否显示指标选股
+    if 'show_indicator_screening' in st.session_state and st.session_state.show_indicator_screening:
+        display_indicator_screening()
+        return
+
     # 检查是否显示智策板块
     if 'show_sector_strategy' in st.session_state and st.session_state.show_sector_strategy:
         display_sector_strategy()
@@ -595,8 +627,10 @@ def main():
 
     else:
         # 批量股票分析界面
+        default_batch_codes = st.session_state.pop("prefill_batch_codes", "")
         stock_input = st.text_area(
             "🔍 请输入多个股票代码（每行一个或用逗号分隔）",
+            value=default_batch_codes,
             placeholder="例如:\n000001\n600036\n00700\n\n或者: 000001, 600036, 00700",
             height=120,
             help="支持多种格式：每行一个代码或用逗号分隔。仅支持A股与港股"
@@ -1614,7 +1648,7 @@ def display_stock_info(stock_info, indicators):
     with col2:
         change_percent = stock_info.get('change_percent', 'N/A')
         if isinstance(change_percent, (int, float)):
-            st.metric("涨跌幅", f"{change_percent:.2f}%", f"{change_percent:.2f}%")
+            st.metric("涨跌幅", f"{change_percent:.3f}%", f"{change_percent:.3f}%")
         else:
             st.metric("涨跌幅", f"{change_percent}")
 
@@ -1899,16 +1933,25 @@ def display_agents_analysis(agents_results):
                             date = ann.get('日期', 'N/A')
                             title = ann.get('公告标题', 'N/A')
                             ann_type = ann.get('公告类型', 'N/A')
-                            link = ann.get('公告链接', '')
+                            saved_path = ann.get('saved_path')
                             
                             col1, col2 = st.columns([4, 1])
                             with col1:
                                 st.markdown(f"**{idx}. [{date}] {title}** ({ann_type})")
                             with col2:
-                                if link and link != 'N/A':
-                                    st.markdown(f"[📥 下载]({link})")
+                                # 仅在存在本地PDF时提供下载按钮，避免远程404链接
+                                if saved_path and os.path.exists(saved_path):
+                                    with open(saved_path, "rb") as f:
+                                        data_bytes = f.read()
+                                    st.download_button(
+                                        label="📥 本地PDF",
+                                        data=data_bytes,
+                                        file_name=os.path.basename(saved_path),
+                                        mime="application/pdf",
+                                        key=f"ann_pdf_{idx}"
+                                    )
                                 else:
-                                    st.markdown("📄 无链接")
+                                    st.markdown("📄 暂无本地PDF")
             
             # 机构研报分析师：显示研报标题列表和下载链接
             if agent_name == '机构研报分析师' and agent_result.get('research_data'):

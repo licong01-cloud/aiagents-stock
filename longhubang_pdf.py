@@ -190,13 +190,33 @@ class LonghubangPDFGenerator:
         # 报告信息
         timestamp = data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         data_info = data.get('data_info', {})
-        
+
+        data_range = data.get('data_date_range')
+        meta = data.get('analysis_meta') or {}
+        mode = meta.get('mode')
+        date = meta.get('date')
+        days = meta.get('days')
+
+        if mode == 'date' and date:
+            mode_text = '指定日期'
+            window_text = f'分析日期: {date}'
+        elif mode == 'recent_days' and days:
+            mode_text = '最近N天'
+            window_text = f'最近 {days} 天数据'
+        else:
+            mode_text = '未知'
+            window_text = ''
+
+        data_range_text = data_range or '未记录'
+
         info_text = f"""
         <para align=center>
         <b>生成时间:</b> {timestamp}<br/>
         <b>数据记录:</b> {data_info.get('total_records', 0)} 条<br/>
         <b>涉及股票:</b> {data_info.get('total_stocks', 0)} 只<br/>
         <b>涉及游资:</b> {data_info.get('total_youzi', 0)} 个<br/>
+        <b>数据日期范围:</b> {data_range_text}<br/>
+        <b>分析模式:</b> {mode_text}{('<br/>' + window_text) if window_text else ''}<br/>
         <b>AI分析师:</b> 5位专业分析师团队<br/>
         <b>分析模型:</b> DeepSeek AI Multi-Agent System
         </para>
@@ -309,6 +329,49 @@ class LonghubangPDFGenerator:
             
             elements.append(Paragraph(concepts_text, styles['Normal']))
         
+        # AI 智能评分排名
+        scoring = data.get('scoring_ranking') or []
+        if scoring:
+            elements.append(Spacer(1, 0.2*inch))
+            elements.append(Paragraph("1.4 AI智能评分排名 (TOP10)", styles['Heading2']))
+            elements.append(Spacer(1, 0.1*inch))
+
+            table_data = [[
+                '排名', '股票名称', '股票代码', '综合评分', '资金含金量',
+                '净买入额', '卖出压力', '机构共振', '加分项'
+            ]]
+
+            for row in scoring[:10]:
+                table_data.append([
+                    str(row.get('排名') or row.get('rank') or ''),
+                    str(row.get('股票名称') or row.get('name') or ''),
+                    str(row.get('股票代码') or row.get('code') or ''),
+                    str(row.get('综合评分') or row.get('score') or ''),
+                    str(row.get('资金含金量') or ''),
+                    str(row.get('净买入额') or row.get('net_buy') or ''),
+                    str(row.get('卖出压力') or ''),
+                    str(row.get('机构共振') or ''),
+                    str(row.get('加分项') or ''),
+                ])
+
+            table = Table(
+                table_data,
+                colWidths=[0.7*inch, 1.4*inch, 1.1*inch, 0.9*inch, 1.0*inch,
+                           1.0*inch, 0.9*inch, 1.0*inch, 0.9*inch],
+            )
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4788')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, -1), self.chinese_font),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('FONTSIZE', (0, 1), (-1, -1), 7),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.whitesmoke),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(table)
+
         return elements
     
     def _create_recommended_stocks(self, data: dict) -> list:

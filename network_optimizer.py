@@ -48,9 +48,10 @@ class NetworkOptimizer:
         self._last_refresh_ts = 0.0
 
         self._load_config()
-        # 启动后台刷新线程
-        t = threading.Thread(target=self._refresh_loop, daemon=True)
-        t.start()
+        # 仅在动态代理功能启用时才启动后台刷新线程，避免在未启用代理时产生任何自动网络访问
+        if self.dynamic_enabled:
+            t = threading.Thread(target=self._refresh_loop, daemon=True)
+            t.start()
 
     # ---------- 配置持久化 ----------
     def _load_config(self):

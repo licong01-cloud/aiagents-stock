@@ -26,6 +26,8 @@ MAPPING_SCHEMES = {
     "复合着色(α) · 流入定尺": {"color": "combo", "size": "flow"},
 }
 
+TDX_IDX_TYPES: List[str] = ["行业指数", "概念指数", "风格指数", "地域指数"]
+
 COLOR_SCALE = ["#d73027", "#ffffff", "#1a9850"]  # 红-白-绿，0中心白（最高红、最低绿）
 
 
@@ -35,6 +37,22 @@ def _backend_get(path: str, **params) -> Dict[str, Any]:
     r = requests.get(url, params=q, timeout=10)
     r.raise_for_status()
     return r.json() if r.content else {}
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _cached_tdx_daily(date: str, idx_type: Optional[str]) -> Dict[str, Any]:
+    return _backend_get("/api/hotboard/tdx/daily", date=date, idx_type=idx_type)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _cached_tdx_top_stocks(board_code: str, date: str, metric: str, limit: int) -> Dict[str, Any]:
+    return _backend_get(
+        "/api/hotboard/top-stocks/tdx",
+        board_code=board_code,
+        date=date,
+        metric=metric,
+        limit=limit,
+    )
 
 
 def _backend_post(path: str, json_payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -124,12 +142,12 @@ def _render_top20_table(items: List[Dict[str, Any]], title: str, use_realtime: b
             "选择": st.column_config.CheckboxColumn("选择"),
             "代码": st.column_config.TextColumn("代码", width="small"),
             "名称": st.column_config.TextColumn("名称", width="small"),
-            "最新价": st.column_config.NumberColumn("最新价", format="%.2f"),
-            "涨幅%": st.column_config.NumberColumn("涨幅%", format="%.2f"),
-            "开盘": st.column_config.NumberColumn("开盘", format="%.2f"),
-            "昨收": st.column_config.NumberColumn("昨收", format="%.2f"),
-            "最高": st.column_config.NumberColumn("最高", format="%.2f"),
-            "最低": st.column_config.NumberColumn("最低", format="%.2f"),
+            "最新价": st.column_config.NumberColumn("最新价", format="%.3f"),
+            "涨幅%": st.column_config.NumberColumn("涨幅%", format="%.3f"),
+            "开盘": st.column_config.NumberColumn("开盘", format="%.3f"),
+            "昨收": st.column_config.NumberColumn("昨收", format="%.3f"),
+            "最高": st.column_config.NumberColumn("最高", format="%.3f"),
+            "最低": st.column_config.NumberColumn("最低", format="%.3f"),
             "成交量(手)": st.column_config.NumberColumn("成交量(手)", format="%.0f"),
             "成交额": st.column_config.NumberColumn("成交额", format="%.0f"),
         },
@@ -341,8 +359,14 @@ def show_hotboard_page(embed: bool = False) -> None:
         
 
     with htab:
-        sub_a, sub_b = st.tabs(["新浪财经历史", "通达信历史"])
-        with sub_a:
+        hist_source = st.radio(
+            "历史数据源",
+            options=["新浪财经历史", "通达信历史"],
+            horizontal=True,
+            key="hotboard_hist_source",
+        )
+
+        if hist_source == "新浪财经历史":
             date = st.date_input("日期", value=dt.date.today())
             cate_hist = st.selectbox("板块分类", options=["行业", "概念", "证监会行业", "全部"], index=1, key="hist_cate")
             cate_val = {"行业": 0, "概念": 1, "证监会行业": 2, "全部": None}[cate_hist]
@@ -381,29 +405,24 @@ def show_hotboard_page(embed: bool = False) -> None:
                     st.info("无数据")
             except Exception as exc:
                 st.error(f"后端错误: {exc}")
-        with sub_b:
+        else:
             date2 = st.date_input("日期", value=dt.date.today(), key="tdx_date")
-            # 加载类型
+            idx_type = st.selectbox("板块类别", options=TDX_IDX_TYPES)
             try:
-                types = _backend_get("/api/hotboard/tdx/types").get("items", [])
-            except Exception:
-                types = []
-            idx_type = st.selectbox("板块类别", options=(types or ["行业"]))
-            try:
-                data = _backend_get("/api/hotboard/tdx/daily", date=date2.isoformat(), idx_type=idx_type)
+                data = _cached_tdx_daily(date2.isoformat(), idx_type)
                 items = data.get("items", [])
                 used_date = date2.isoformat()
                 if not items:
                     for back in range(1, 6):
                         d2 = (date2 - dt.timedelta(days=back)).isoformat()
-                        data = _backend_get("/api/hotboard/tdx/daily", date=d2, idx_type=idx_type)
+                        data = _cached_tdx_daily(d2, idx_type)
                         items = data.get("items", [])
                         if items:
                             used_date = d2
                             break
                 # Fallback：所选类别无数据时，取全部类型
                 if not items:
-                    data = _backend_get("/api/hotboard/tdx/daily", date=used_date)
+                    data = _cached_tdx_daily(used_date, None)
                     items = data.get("items", [])
                 if items:
                     df = pd.DataFrame(items)
@@ -465,7 +484,7 @@ def show_hotboard_page(embed: bool = False) -> None:
                         if picked:
                             metric_btn = st.radio("Top20 维度", options=["按涨幅", "按资金流入"], horizontal=True, key="tdx_top_metric")
                             m = "chg" if metric_btn == "按涨幅" else "flow"
-                            data2 = _backend_get("/api/hotboard/top-stocks/tdx", board_code=picked, date=used_date, metric=m, limit=20)
+                            data2 = _cached_tdx_top_stocks(picked, used_date, m, 20)
                             _render_top20_table(data2.get("items", []), title=f"历史Top20 - {clicked_name}", use_realtime=False, date=used_date)
                     else:
                         st.plotly_chart(fig, use_container_width=True)
@@ -475,7 +494,7 @@ def show_hotboard_page(embed: bool = False) -> None:
                             name, code = clicked.split("|")
                             metric_btn = st.radio("Top20 维度", options=["按涨幅", "按资金流入"], horizontal=True, key="tdx_top_metric2")
                             m = "chg" if metric_btn == "按涨幅" else "flow"
-                            data2 = _backend_get("/api/hotboard/top-stocks/tdx", board_code=code, date=used_date, metric=m, limit=20)
+                            data2 = _cached_tdx_top_stocks(code, used_date, m, 20)
                             _render_top20_table(data2.get("items", []), title=f"历史Top20 - {name}", use_realtime=False, date=used_date)
                 else:
                     st.info("无数据")
