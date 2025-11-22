@@ -148,7 +148,8 @@ def display_stock_card(stock: Dict):
                         "成本价", 
                         value=cost_price if cost_price else 0.0, 
                         min_value=0.0, 
-                        step=0.01
+                        step=0.001,
+                        format="%.3f",
                     )
                     new_quantity = st.number_input(
                         "持仓数量", 
@@ -206,7 +207,8 @@ def display_add_stock_form():
             cost_price = st.number_input(
                 "成本价", 
                 min_value=0.0, 
-                step=0.01,
+                step=0.001,
+                format="%.3f",
                 help="可选，用于计算收益"
             )
             quantity = st.number_input(
@@ -783,21 +785,21 @@ def display_history_record(record: Dict):
         with col1:
             st.markdown("**价格信息**")
             if current_price:
-                st.write(f"当时价格: ¥{current_price:.2f}")
+                st.write(f"当时价格: ¥{current_price:.3f}")
             if target_price:
-                st.write(f"目标价: ¥{target_price:.2f}")
+                st.write(f"目标价: ¥{target_price:.3f}")
         
         with col2:
             st.markdown("**进场区间**")
             if entry_min and entry_max:
-                st.write(f"¥{entry_min:.2f} ~ ¥{entry_max:.2f}")
+                st.write(f"¥{entry_min:.3f} ~ ¥{entry_max:.3f}")
         
         with col3:
             st.markdown("**风控位置**")
             if take_profit:
-                st.write(f"止盈: ¥{take_profit:.2f}")
+                st.write(f"止盈: ¥{take_profit:.3f}")
             if stop_loss:
-                st.write(f"止损: ¥{stop_loss:.2f}")
+                st.write(f"止损: ¥{stop_loss:.3f}")
         
         if summary:
             st.markdown("**分析摘要**")

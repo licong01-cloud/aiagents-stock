@@ -288,16 +288,16 @@ class DataSourceManager:
                     is_etf = self._looks_like_etf_code(base_code)
                     df = None
 
-                    # 1) 若看起来像 ETF，优先尝试 fund_basic
+                    # 1) 若看起来像 ETF，优先尝试 etf_basic
                     if is_etf:
                         try:
-                            df = self.tushare_api.fund_basic(ts_code=ts_code)
+                            df = self.tushare_api.etf_basic(ts_code=ts_code)
                         except Exception:
                             df = None
                         if df is None or df.empty:
                             # 退而求其次：按市场拉取再过滤
                             try:
-                                df = self.tushare_api.fund_basic(market='E')
+                                df = self.tushare_api.etf_basic(market='E')
                                 if df is not None and not df.empty:
                                     df = df[df['ts_code'] == ts_code]
                             except Exception:
@@ -369,20 +369,51 @@ class DataSourceManager:
         if not self.tdx_available:
             return None
 
-        try:
-            response = requests.get(
-                f"{self.tdx_api_base.rstrip('/')}/api/quote",
-                params={"code": symbol},
-                timeout=5
-            )
-            response.raise_for_status()
-            payload = response.json()
-        except Exception as exc:
-            print(f"[TDX] ❌ 获取实时行情失败: {exc}")
+        # 将传入的 symbol 规范为 TDX 接口期望的形式：SH600000 / SZ000001 / BJ430047
+        code_raw = (symbol or "").strip().upper()
+        if not code_raw:
             return None
 
+        base_code = code_raw.split(".")[0] if "." in code_raw else code_raw
+        full_code = base_code
+        try:
+            # 尝试复用已有的 tushare 代码转换逻辑来推断交易所
+            ts_code = self._convert_to_ts_code(base_code)
+            if ts_code and "." in ts_code:
+                base, exch = ts_code.split(".", 1)
+                exch = exch.upper()
+                if exch in {"SH", "SZ", "BJ"}:
+                    full_code = f"{exch}{base}"
+        except Exception:
+            # 回退到原始 6 位代码
+            full_code = base_code
+
+        def _call_tdx(code: str) -> Optional[dict]:
+            try:
+                resp = requests.get(
+                    f"{self.tdx_api_base.rstrip('/')}/api/quote",
+                    params={"code": code},
+                    timeout=5,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as exc:  # noqa: BLE001
+                print(f"[TDX] ❌ 获取实时行情失败: {exc} (code={code})")
+                return None
+            if not isinstance(data, dict) or data.get("code") != 0:
+                print(f"[TDX] ⚠️ 接口返回异常: {data}")
+                return data  # 返回原始 payload，调用方可继续判断
+            return data
+
+        # 1) 优先使用规范化后的 full_code（如 SH588790）
+        payload = _call_tdx(full_code)
+        # 2) 如返回非正常 code，且提示未查询到代码或长度错误，则回退为 6 位代码再试一次
+        if isinstance(payload, dict) and payload.get("code") != 0:
+            msg = str(payload.get("message") or "")
+            if ("未查询到代码" in msg) or ("长度错误" in msg):
+                payload = _call_tdx(base_code)
+
         if not isinstance(payload, dict) or payload.get('code') != 0:
-            print(f"[TDX] ⚠️ 接口返回异常: {payload}")
             return None
 
         data_list = payload.get('data') or []
@@ -434,7 +465,6 @@ class DataSourceManager:
         print(f"[TDX] ✅ 成功获取 {symbol} 实时行情")
         return {
             'symbol': symbol,
-            'name': quote.get('Name') or quote.get('Code') or quote.get('code'),
             'price': close_price,
             'change_percent': change_percent,
             'change': change_amount,
@@ -507,35 +537,6 @@ class DataSourceManager:
             except Exception as e:
                 print(f"[Tushare] ❌ 获取失败: {e}")
 
-        # 失败再使用 akshare 兜底（仅A股现货表，部分ETF也可能包含）
-        try:
-            with network_optimizer.apply():
-                import akshare as ak
-                print(f"[Akshare] 正在获取 {base_code} 的实时行情(兜底)...")
-                df = ak.stock_zh_a_spot_em()
-            stock_df = df[df['代码'] == base_code]
-            if not stock_df.empty:
-                row = stock_df.iloc[0]
-                quotes = {
-                    'symbol': base_code,
-                    'name': row.get('名称'),
-                    'price': row.get('最新价'),
-                    'change_percent': row.get('涨跌幅'),
-                    'change': row.get('涨跌额'),
-                    'volume': row.get('成交量'),
-                    'amount': row.get('成交额'),
-                    'high': row.get('最高'),
-                    'low': row.get('最低'),
-                    'open': row.get('今开'),
-                    'pre_close': row.get('昨收'),
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'source': 'akshare'
-                }
-                print(f"[Akshare] ✅ 成功获取实时行情")
-                return quotes
-        except Exception as e:
-            print(f"[Akshare] ❌ 获取失败: {e}")
-        
         return quotes
     
     def get_financial_data(self, symbol, report_type='income'):
@@ -590,6 +591,53 @@ class DataSourceManager:
         
         return None
     
+    def _search_name_via_tdx(self, base_code: str) -> Optional[str]:
+        """使用 TDX /api/search 按代码查找股票名称。
+
+        仅用于普通股票（非 ETF），且只在 /api/quote 返回的 name 为纯代码时作为兜底使用。
+        """
+        base = (self.tdx_api_base or "").rstrip("/")
+        if not base:
+            return None
+
+        code = (base_code or "").strip()
+        if not code or len(code) != 6:
+            return None
+
+        # ETF 不走 /api/search，目前接口对 ETF data 为空
+        if self._looks_like_etf_code(code):
+            return None
+
+        try:
+            with network_optimizer.apply():
+                url = f"{base}/api/search"
+                print(f"[TDX] search name via /api/search for code={code} ...")
+                resp = requests.get(url, params={"keyword": code}, timeout=5)
+                resp.raise_for_status()
+                payload = resp.json()
+        except Exception as exc:
+            print(f"[TDX] /api/search lookup failed for {code}: {exc}")
+            return None
+
+        data = payload.get("data") or []
+        if not isinstance(data, list) or not data:
+            print(f"[TDX] /api/search returned empty data for {code}")
+            return None
+
+        for item in data:
+            try:
+                c = str(item.get("code") or "").strip()
+                nm = str(item.get("name") or "").strip()
+            except Exception:
+                continue
+            # 必须 code 精确匹配，且 name 不是纯 6 位数字
+            if c == code and nm and not (nm.isdigit() and len(nm) == 6):
+                print(f"[TDX] /api/search hit: code={c}, name={nm}")
+                return nm
+
+        print(f"[TDX] /api/search: no valid name for {code}")
+        return None
+
     def _convert_to_ts_code(self, symbol):
         """
         将6位股票代码转换为tushare格式（带市场后缀）
@@ -655,27 +703,12 @@ class DataSourceManager:
             print(f"[DS] get_security_name_and_type: invalid base_code '{base_code}', return None")
             return None
 
-        # 1) 尝试TDX实时接口快速拿名称（覆盖股票/ETF）。如果返回的“名称”等于纯6位代码，则视为无效名称，继续走 Tushare/Akshare。
+        # 1) 使用 TDX /api/search 按 code 查股票名称（仅股票，不包含 ETF）
+        search_name = None
         try:
-            print(f"[DS] get_security_name_and_type: querying TDX with base_code='{base_code}'")
-            q = self._get_tdx_quote(base_code)
-            if q and isinstance(q, dict):
-                nm = q.get('name')
-                # 某些环境下 TDX 会把代码作为 name 返回，例如 '600103'，这时不能直接当作有效名称
-                if nm and not (str(nm).strip().isdigit() and len(str(nm).strip()) == 6):
-                    typ = 'etf' if self._looks_like_etf_code(base_code) else 'stock'
-                    print(f"[DS] TDX hit: name='{nm}', type='{typ}'")
-                    return {
-                        'name': str(nm),
-                        'type': typ,
-                        'ts_code': self._convert_to_ts_code(base_code)
-                    }
-                else:
-                    print(f"[DS] TDX returned code-like name '{nm}' for {base_code}, will fallback to Tushare/Akshare")
-            else:
-                print(f"[DS] TDX returned no name for {base_code}: {q}")
+            search_name = self._search_name_via_tdx(base_code)
         except Exception as e:
-            print(f"[DS] TDX lookup failed for {base_code}: {e}")
+            print(f"[DS] _search_name_via_tdx failed for {base_code}: {e}")
 
         # 2) Tushare: 先按股票查询
         if self.tushare_available:
@@ -685,29 +718,36 @@ class DataSourceManager:
                 with network_optimizer.apply():
                     df = self.tushare_api.stock_basic(ts_code=ts_code, fields='ts_code,name')
                 if df is not None and not df.empty:
-                    print(f"[DS] stock_basic hit for ts_code='{ts_code}', name='{df.iloc[0]['name']}'")
-                    return {
-                        'name': str(df.iloc[0]['name']),
-                        'type': 'stock',
-                        'ts_code': ts_code,
-                    }
+                    ts_name = ""
+                    try:
+                        ts_name = str(df.iloc[0]['name'])
+                    except Exception:
+                        pass
+                    final_name = ts_name or (search_name or "")
+                    if final_name:
+                        print(f"[DS] stock_basic hit for ts_code='{ts_code}', name='{final_name}'")
+                        return {
+                            'name': final_name,
+                            'type': 'stock',
+                            'ts_code': ts_code,
+                        }
             except Exception as e:
                 print(f"[DS] stock_basic failed for ts_code='{ts_code}': {e}")
 
-            # 3) Tushare: ETF/基金基本信息
+            # 3) Tushare: ETF 基本信息（使用 etf_basic）
             try:
                 with network_optimizer.apply():
                     # 直接用ts_code精确查询；若数据源不支持，再按market粗查。
                     fdf = None
                     try:
-                        fdf = self.tushare_api.fund_basic(ts_code=ts_code)
+                        fdf = self.tushare_api.etf_basic(ts_code=ts_code)
                     except Exception as e:
-                        print(f"[DS] fund_basic(ts_code={ts_code}) failed: {e}")
+                        print(f"[DS] etf_basic(ts_code={ts_code}) failed: {e}")
                         fdf = None
                     if (fdf is None) or fdf.empty:
                         # 退而求其次，按ETF市场拉取再过滤
-                        print(f"[DS] fund_basic(ts_code={ts_code}) empty, fallback fund_basic(market='E') filter ts_code")
-                        fdf = self.tushare_api.fund_basic(market='E')
+                        print(f"[DS] etf_basic(ts_code={ts_code}) empty, fallback etf_basic(market='E') filter ts_code")
+                        fdf = self.tushare_api.etf_basic(market='E')
                         if fdf is not None and not fdf.empty:
                             fdf = fdf[fdf['ts_code'] == ts_code]
                 if fdf is not None and not fdf.empty:
@@ -715,14 +755,14 @@ class DataSourceManager:
                     row = fdf.iloc[0]
                     nm = row.get('name') if 'name' in row else row.get('fund_name')
                     if nm:
-                        print(f"[DS] fund_basic hit for ts_code='{ts_code}', name='{nm}'")
+                        print(f"[DS] etf_basic hit for ts_code='{ts_code}', name='{nm}'")
                         return {
                             'name': str(nm),
                             'type': 'etf',
                             'ts_code': ts_code,
                         }
             except Exception as e:
-                print(f"[DS] fund_basic lookup failed for ts_code='{ts_code}': {e}")
+                print(f"[DS] etf_basic lookup failed for ts_code='{ts_code}': {e}")
 
         # 4) Akshare兜底（仅股票）
         try:

@@ -1,0 +1,885 @@
+﻿数据集,规范字段名,来源系统,来源接口,来源字段名,来源数据类型,来源单位,转换系数,来源字段说明,备注
+kline_daily,amount,tushare_daily,,amount,float,千元,0.1,,原始为千元
+kline_daily,change,tushare_daily,,change,float,元,1,,原始为元
+kline_daily,close,tushare_daily,,close,float,元,1,,原始为元
+kline_daily,high,tushare_daily,,high,float,元,1,,原始为元
+kline_daily,low,tushare_daily,,low,float,元,1,,原始为元
+kline_daily,open,tushare_daily,,open,float,元,1,,原始为元
+kline_daily,pct_chg,tushare_daily,,pct_chg,float,百分比,1,,原始为百分比
+kline_daily,pre_close,tushare_daily,,pre_close,float,元,1,,原始为元
+kline_daily,trade_date,tushare_daily,,trade_date,str,无,1,,日期字符串
+kline_daily,ts_code,tushare_daily,,ts_code,str,无,1,,TS代码
+kline_daily,vol,tushare_daily,,vol,float,手,1,,原始为手
+kline_m1,amount_m,tushare_stk_mins,stk_mins,amount,float,元,1,成交金额,
+kline_m1,close,tushare_stk_mins,stk_mins,close,float,元,1,收盘价,
+kline_m1,high,tushare_stk_mins,stk_mins,high,float,元,1,最高价,
+kline_m1,low,tushare_stk_mins,stk_mins,low,float,元,1,最低价,
+kline_m1,open,tushare_stk_mins,stk_mins,open,float,元,1,开盘价,
+kline_m1,trade_time,tushare_stk_mins,stk_mins,trade_time,str,无,1,交易时间,
+kline_m1,ts_code,tushare_stk_mins,stk_mins,ts_code,str,无,1,股票代码,
+kline_m1,vol,tushare_stk_mins,stk_mins,vol,int,手,1,成交量,
+trade_calendar,exchange,tushare_trade_cal,trade_cal,exchange,str,无,1,交易所 SSE上交所 SZSE深交所,交易日历
+trade_calendar,cal_date,tushare_trade_cal,trade_cal,cal_date,str,无,1,日历日期,交易日历
+trade_calendar,is_open,tushare_trade_cal,trade_cal,is_open,str,无,1,是否交易 0休市 1交易,交易日历
+trade_calendar,pretrade_date,tushare_trade_cal,trade_cal,pretrade_date,str,无,1,上一个交易日,交易日历
+stock_basic,ts_code,tushare_stock_basic,stock_basic,ts_code,str,无,1,TS代码,股票基础信息
+stock_basic,symbol,tushare_stock_basic,stock_basic,symbol,str,无,1,股票代码,股票基础信息
+stock_basic,name,tushare_stock_basic,stock_basic,name,str,无,1,股票名称,股票基础信息
+stock_basic,area,tushare_stock_basic,stock_basic,area,str,无,1,地域,股票基础信息
+stock_basic,industry,tushare_stock_basic,stock_basic,industry,str,无,1,所属行业,股票基础信息
+stock_basic,fullname,tushare_stock_basic,stock_basic,fullname,str,无,1,股票全称,股票基础信息
+stock_basic,enname,tushare_stock_basic,stock_basic,enname,str,无,1,英文全称,股票基础信息
+stock_basic,cnspell,tushare_stock_basic,stock_basic,cnspell,str,无,1,拼音缩写,股票基础信息
+stock_basic,market,tushare_stock_basic,stock_basic,market,str,无,1,市场类型（主板/创业板/科创板/CDR）,股票基础信息
+stock_basic,exchange,tushare_stock_basic,stock_basic,exchange,str,无,1,交易所代码,股票基础信息
+stock_basic,curr_type,tushare_stock_basic,stock_basic,curr_type,str,无,1,交易货币,股票基础信息
+stock_basic,list_status,tushare_stock_basic,stock_basic,list_status,str,无,1,上市状态 L上市 D退市 P暂停上市,股票基础信息
+stock_basic,list_date,tushare_stock_basic,stock_basic,list_date,str,无,1,上市日期,股票基础信息
+stock_basic,delist_date,tushare_stock_basic,stock_basic,delist_date,str,无,1,退市日期,股票基础信息
+stock_basic,is_hs,tushare_stock_basic,stock_basic,is_hs,str,无,1,是否沪深港通标的，N否 H沪股通 S深股通,股票基础信息
+stock_basic,act_name,tushare_stock_basic,stock_basic,act_name,str,无,1,实控人名称,股票基础信息
+stock_basic,act_ent_type,tushare_stock_basic,stock_basic,act_ent_type,str,无,1,实控人企业性质,股票基础信息
+daily_basic,ts_code,tushare_daily_basic,daily_basic,ts_code,str,无,1,TS股票代码,TS股票代码
+daily_basic,trade_date,tushare_daily_basic,daily_basic,trade_date,str,无,1,交易日期,交易日期
+daily_basic,close,tushare_daily_basic,daily_basic,close,float,无,1,当日收盘价,当日收盘价
+daily_basic,turnover_rate,tushare_daily_basic,daily_basic,turnover_rate,float,%,1,换手率（%）,换手率（%）
+daily_basic,turnover_rate_f,tushare_daily_basic,daily_basic,turnover_rate_f,float,无,1,换手率（自由流通股）,换手率（自由流通股）
+daily_basic,volume_ratio,tushare_daily_basic,daily_basic,volume_ratio,float,无,1,量比,量比
+daily_basic,pe,tushare_daily_basic,daily_basic,pe,float,无,1,市盈率（总市值/净利润， 亏损的PE为空）,市盈率（总市值/净利润， 亏损的PE为空）
+daily_basic,pe_ttm,tushare_daily_basic,daily_basic,pe_ttm,float,无,1,市盈率（TTM，亏损的PE为空）,市盈率（TTM，亏损的PE为空）
+daily_basic,pb,tushare_daily_basic,daily_basic,pb,float,无,1,市净率（总市值/净资产）,市净率（总市值/净资产）
+daily_basic,ps,tushare_daily_basic,daily_basic,ps,float,%,1,市销率,市销率
+daily_basic,ps_ttm,tushare_daily_basic,daily_basic,ps_ttm,float,无,1,市销率（TTM）,市销率（TTM）
+daily_basic,dv_ratio,tushare_daily_basic,daily_basic,dv_ratio,float,%,1,股息率 （%）,股息率 （%）
+daily_basic,dv_ttm,tushare_daily_basic,daily_basic,dv_ttm,float,%,1,股息率（TTM）（%）,股息率（TTM）（%）
+daily_basic,total_share,tushare_daily_basic,daily_basic,total_share,float,万股,1,总股本 （万股）,总股本 （万股）
+daily_basic,float_share,tushare_daily_basic,daily_basic,float_share,float,万股,1,流通股本 （万股）,流通股本 （万股）
+daily_basic,free_share,tushare_daily_basic,daily_basic,free_share,float,万股,1,自由流通股本 （万）,自由流通股本 （万）
+daily_basic,total_mv,tushare_daily_basic,daily_basic,total_mv,float,万元,1,总市值 （万元）,总市值 （万元）
+daily_basic,circ_mv,tushare_daily_basic,daily_basic,circ_mv,float,万元,1,流通市值（万元）,流通市值（万元）
+moneyflow_ind_dc,trade_date,tushare_moneyflow_ind_dc,moneyflow_ind_dc,trade_date,str,无,1,交易日期,行业资金流向日度
+moneyflow_ind_dc,content_type,tushare_moneyflow_ind_dc,moneyflow_ind_dc,content_type,str,无,1,数据类型,行业资金流向日度
+moneyflow_ind_dc,ts_code,tushare_moneyflow_ind_dc,moneyflow_ind_dc,ts_code,str,无,1,DC板块代码（行业、概念、地域）,行业资金流向日度
+moneyflow_ind_dc,name,tushare_moneyflow_ind_dc,moneyflow_ind_dc,name,str,无,1,板块名称,行业资金流向日度
+moneyflow_ind_dc,pct_change,tushare_moneyflow_ind_dc,moneyflow_ind_dc,pct_change,float,%,1,板块涨跌幅（%）,行业资金流向日度
+moneyflow_ind_dc,close,tushare_moneyflow_ind_dc,moneyflow_ind_dc,close,float,无,1,板块最新指数,行业资金流向日度
+moneyflow_ind_dc,net_amount,tushare_moneyflow_ind_dc,moneyflow_ind_dc,net_amount,float,元,1,今日主力净流入 净额（元）,行业资金流向日度
+moneyflow_ind_dc,net_amount_rate,tushare_moneyflow_ind_dc,moneyflow_ind_dc,net_amount_rate,float,%,1,今日主力净流入净占比%,行业资金流向日度
+moneyflow_ind_dc,buy_elg_amount,tushare_moneyflow_ind_dc,moneyflow_ind_dc,buy_elg_amount,float,元,1,今日超大单净流入 净额（元）,行业资金流向日度
+moneyflow_ind_dc,buy_elg_amount_rate,tushare_moneyflow_ind_dc,moneyflow_ind_dc,buy_elg_amount_rate,float,%,1,今日超大单净流入 净占比%,行业资金流向日度
+moneyflow_ind_dc,buy_lg_amount,tushare_moneyflow_ind_dc,moneyflow_ind_dc,buy_lg_amount,float,元,1,今日大单净流入 净额（元）,行业资金流向日度
+moneyflow_ind_dc,buy_lg_amount_rate,tushare_moneyflow_ind_dc,moneyflow_ind_dc,buy_lg_amount_rate,float,%,1,今日大单净流入 净占比%,行业资金流向日度
+moneyflow_ind_dc,buy_md_amount,tushare_moneyflow_ind_dc,moneyflow_ind_dc,buy_md_amount,float,元,1,今日中单净流入 净额（元）,行业资金流向日度
+moneyflow_ind_dc,buy_md_amount_rate,tushare_moneyflow_ind_dc,moneyflow_ind_dc,buy_md_amount_rate,float,%,1,今日中单净流入 净占比%,行业资金流向日度
+moneyflow_ind_dc,buy_sm_amount,tushare_moneyflow_ind_dc,moneyflow_ind_dc,buy_sm_amount,float,元,1,今日小单净流入 净额（元）,行业资金流向日度
+moneyflow_ind_dc,buy_sm_amount_rate,tushare_moneyflow_ind_dc,moneyflow_ind_dc,buy_sm_amount_rate,float,%,1,今日小单净流入 净占比%,行业资金流向日度
+moneyflow_ind_dc,buy_sm_amount_stock,tushare_moneyflow_ind_dc,moneyflow_ind_dc,buy_sm_amount_stock,str,无,1,今日主力净流入最大股,行业资金流向日度
+moneyflow_ind_dc,rank,tushare_moneyflow_ind_dc,moneyflow_ind_dc,rank,int,无,1,序号,行业资金流向日度
+realtime_quotes,name,tushare_realtime_quote,realtime_quote,name,str,无,1,股票名称,实时行情
+realtime_quotes,ts_code,tushare_realtime_quote,realtime_quote,ts_code,str,无,1,股票代码,实时行情
+realtime_quotes,date,tushare_realtime_quote,realtime_quote,date,str,无,1,交易日期,实时行情
+realtime_quotes,time,tushare_realtime_quote,realtime_quote,time,str,无,1,交易时间,实时行情
+realtime_quotes,open,tushare_realtime_quote,realtime_quote,open,float,元,1,开盘价,实时行情
+realtime_quotes,pre_close,tushare_realtime_quote,realtime_quote,pre_close,float,元,1,昨收价,实时行情
+realtime_quotes,price,tushare_realtime_quote,realtime_quote,price,float,元,1,现价,实时行情
+realtime_quotes,high,tushare_realtime_quote,realtime_quote,high,float,元,1,今日最高价,实时行情
+realtime_quotes,low,tushare_realtime_quote,realtime_quote,low,float,元,1,今日最低价,实时行情
+realtime_quotes,bid,tushare_realtime_quote,realtime_quote,bid,float,元,1,竞买价，即“买一”报价（元）,实时行情
+realtime_quotes,ask,tushare_realtime_quote,realtime_quote,ask,float,元,1,竞卖价，即“卖一”报价（元）,实时行情
+realtime_quotes,volume,tushare_realtime_quote,realtime_quote,volume,int,手,1,成交量（src=sina时是股，src=dc时是手）,实时行情
+realtime_quotes,rt_amount,tushare_realtime_quote,realtime_quote,amount,float,元,1,成交金额（元 CNY）,实时行情
+realtime_quotes,b1_v,tushare_realtime_quote,realtime_quote,b1_v,float,手,1,委买一（量，单位：手，下同）,实时行情
+realtime_quotes,b1_p,tushare_realtime_quote,realtime_quote,b1_p,float,元,1,委买一（价，单位：元，下同）,实时行情
+realtime_quotes,b2_v,tushare_realtime_quote,realtime_quote,b2_v,float,手,1,委买二（量）,实时行情
+realtime_quotes,b2_p,tushare_realtime_quote,realtime_quote,b2_p,float,元,1,委买二（价）,实时行情
+realtime_quotes,b3_v,tushare_realtime_quote,realtime_quote,b3_v,float,手,1,委买三（量）,实时行情
+realtime_quotes,b3_p,tushare_realtime_quote,realtime_quote,b3_p,float,元,1,委买三（价）,实时行情
+realtime_quotes,b4_v,tushare_realtime_quote,realtime_quote,b4_v,float,手,1,委买四（量）,实时行情
+realtime_quotes,b4_p,tushare_realtime_quote,realtime_quote,b4_p,float,元,1,委买四（价）,实时行情
+realtime_quotes,b5_v,tushare_realtime_quote,realtime_quote,b5_v,float,手,1,委买五（量）,实时行情
+realtime_quotes,b5_p,tushare_realtime_quote,realtime_quote,b5_p,float,元,1,委买五（价）,实时行情
+realtime_quotes,a1_v,tushare_realtime_quote,realtime_quote,a1_v,float,手,1,委卖一（量，单位：手，下同）,实时行情
+realtime_quotes,a1_p,tushare_realtime_quote,realtime_quote,a1_p,float,元,1,委卖一（价，单位：元，下同）,实时行情
+realtime_quotes,a2_v,tushare_realtime_quote,realtime_quote,a2_v,float,手,1,委卖二（量）,实时行情
+realtime_quotes,a2_p,tushare_realtime_quote,realtime_quote,a2_p,float,元,1,委卖二（价）,实时行情
+realtime_quotes,a3_v,tushare_realtime_quote,realtime_quote,a3_v,float,手,1,委卖三（量）,实时行情
+realtime_quotes,a3_p,tushare_realtime_quote,realtime_quote,a3_p,float,元,1,委卖三（价）,实时行情
+realtime_quotes,a4_v,tushare_realtime_quote,realtime_quote,a4_v,float,手,1,委卖四（量）,实时行情
+realtime_quotes,a4_p,tushare_realtime_quote,realtime_quote,a4_p,float,元,1,委卖四（价）,实时行情
+realtime_quotes,a5_v,tushare_realtime_quote,realtime_quote,a5_v,float,手,1,委卖五（量）,实时行情
+realtime_quotes,a5_p,tushare_realtime_quote,realtime_quote,a5_p,float,元,1,委卖五（价）,实时行情
+tdx_index,ts_code,tushare_tdx_index,tdx_index,ts_code,str,无,1,板块代码,板块指数
+tdx_index,trade_date,tushare_tdx_index,tdx_index,trade_date,str,无,1,交易日期,板块指数
+tdx_index,name,tushare_tdx_index,tdx_index,name,str,无,1,板块名称,板块指数
+tdx_index,idx_type,tushare_tdx_index,tdx_index,idx_type,str,无,1,板块类型,板块指数
+tdx_index,idx_count,tushare_tdx_index,tdx_index,idx_count,int,无,1,成分个数,板块指数
+tdx_index,total_share,tushare_tdx_index,tdx_index,total_share,float,亿元,1,总股本(亿),板块指数
+tdx_index,float_share,tushare_tdx_index,tdx_index,float_share,float,亿元,1,流通股(亿),板块指数
+tdx_index,total_mv,tushare_tdx_index,tdx_index,total_mv,float,亿元,1,总市值(亿),板块指数
+tdx_index,float_mv,tushare_tdx_index,tdx_index,float_mv,float,亿元,1,流通市值(亿),板块指数
+tdx_member,ts_code,tushare_tdx_member,tdx_member,ts_code,str,无,1,板块代码,板块成份股
+tdx_member,trade_date,tushare_tdx_member,tdx_member,trade_date,str,无,1,交易日期,板块成份股
+tdx_member,con_code,tushare_tdx_member,tdx_member,con_code,str,无,1,成分股票代码,板块成份股
+tdx_member,con_name,tushare_tdx_member,tdx_member,con_name,str,无,1,成分股票名称,板块成份股
+tdx_index,ts_code,db_aistock,market.tdx_board_index,ts_code,str,无,1.0,market.tdx_board_index 字段 ts_code（板块代码，如 880728.TDX）,通达信板块基础信息（本地表）
+tdx_index,trade_date,db_aistock,market.tdx_board_index,trade_date,str,无,1.0,market.tdx_board_index 字段 trade_date（数据日期 YYYY-MM-DD）,通达信板块基础信息（本地表）
+tdx_index,name,db_aistock,market.tdx_board_index,name,str,无,1.0,market.tdx_board_index 字段 name（板块名称）,通达信板块基础信息（本地表）
+tdx_index,idx_type,db_aistock,market.tdx_board_index,idx_type,str,无,1.0,market.tdx_board_index 字段 idx_type（板块类型：概念/行业/风格/地域等）,通达信板块基础信息（本地表）
+tdx_index,idx_count,db_aistock,market.tdx_board_index,idx_count,int,无,1.0,market.tdx_board_index 字段 idx_count（成分数量）,通达信板块基础信息（本地表）
+tdx_member,ts_code,db_aistock,market.tdx_board_member,ts_code,str,无,1.0,market.tdx_board_member 字段 ts_code（板块代码）,通达信板块成分（本地表）
+tdx_member,trade_date,db_aistock,market.tdx_board_member,trade_date,str,无,1.0,market.tdx_board_member 字段 trade_date（数据日期 YYYY-MM-DD）,通达信板块成分（本地表）
+tdx_member,con_code,db_aistock,market.tdx_board_member,con_code,str,无,1.0,market.tdx_board_member 字段 con_code（成分证券 TS 代码）,通达信板块成分（本地表）
+tdx_member,con_name,db_aistock,market.tdx_board_member,con_name,str,无,1.0,market.tdx_board_member 字段 con_name（成分证券名称）,通达信板块成分（本地表）
+tdx_board_daily,trade_date,db_aistock,market.tdx_board_daily,trade_date,str,无,1.0,market.tdx_board_daily 字段 trade_date（交易日 YYYY-MM-DD）,通达信板块行情（本地表）
+tdx_board_daily,ts_code,db_aistock,market.tdx_board_daily,ts_code,str,无,1.0,market.tdx_board_daily 字段 ts_code（板块代码）,通达信板块行情（本地表）
+tdx_board_daily,open,db_aistock,market.tdx_board_daily,open,float,元,1.0,market.tdx_board_daily 字段 open（开盘价，单位：元）,通达信板块行情（本地表）
+tdx_board_daily,high,db_aistock,market.tdx_board_daily,high,float,元,1.0,market.tdx_board_daily 字段 high（最高价，单位：元）,通达信板块行情（本地表）
+tdx_board_daily,low,db_aistock,market.tdx_board_daily,low,float,元,1.0,market.tdx_board_daily 字段 low（最低价，单位：元）,通达信板块行情（本地表）
+tdx_board_daily,close,db_aistock,market.tdx_board_daily,close,float,元,1.0,market.tdx_board_daily 字段 close（收盘价，单位：元）,通达信板块行情（本地表）
+tdx_board_daily,pre_close,db_aistock,market.tdx_board_daily,pre_close,float,元,1.0,market.tdx_board_daily 字段 pre_close（前收盘价，单位：元）,通达信板块行情（本地表）
+tdx_board_daily,change,db_aistock,market.tdx_board_daily,change,float,元,1.0,market.tdx_board_daily 字段 change（涨跌额，单位：元）,通达信板块行情（本地表）
+tdx_board_daily,pct_chg,db_aistock,market.tdx_board_daily,pct_chg,float,%,1.0,market.tdx_board_daily 字段 pct_chg（涨跌幅，单位：%）,通达信板块行情（本地表）
+tdx_board_daily,vol,db_aistock,market.tdx_board_daily,vol,float,手,1.0,market.tdx_board_daily 字段 vol（成交量，单位：手）,通达信板块行情（本地表）
+tdx_board_daily,amount,db_aistock,market.tdx_board_daily,amount,float,元,1.0,market.tdx_board_daily 字段 amount（成交额，单位：元）,通达信板块行情（本地表）
+adj_factor_daily,ts_code,tushare_adj_factor,adj_factor,ts_code,str,无,1,股票代码,复权因子日度
+adj_factor_daily,trade_date,tushare_adj_factor,adj_factor,trade_date,str,无,1,交易日期,复权因子日度
+adj_factor_daily,adj_factor,tushare_adj_factor,adj_factor,adj_factor,float,无,1,复权因子,复权因子日度
+news_major,title,tushare_major_news,major_news,title,str,无,1,标题,重大新闻
+news_major,content,tushare_major_news,major_news,content,str,无,1,内容 (默认不显示，需要在fields里指定),重大新闻
+news_major,pub_time,tushare_major_news,major_news,pub_time,str,无,1,发布时间,重大新闻
+news_major,src,tushare_major_news,major_news,src,str,无,1,来源网站,重大新闻
+fina_indicator_quarterly,ts_code,tushare_fina_indicator,fina_indicator,ts_code,str,无,1,TS代码,财务指标季度
+fina_indicator_quarterly,ann_date,tushare_fina_indicator,fina_indicator,ann_date,str,无,1,公告日期,财务指标季度
+fina_indicator_quarterly,end_date,tushare_fina_indicator,fina_indicator,end_date,str,无,1,报告期,财务指标季度
+fina_indicator_quarterly,eps,tushare_fina_indicator,fina_indicator,eps,float,无,1,基本每股收益,财务指标季度
+fina_indicator_quarterly,dt_eps,tushare_fina_indicator,fina_indicator,dt_eps,float,无,1,稀释每股收益,财务指标季度
+fina_indicator_quarterly,total_revenue_ps,tushare_fina_indicator,fina_indicator,total_revenue_ps,float,无,1,每股营业总收入,财务指标季度
+fina_indicator_quarterly,revenue_ps,tushare_fina_indicator,fina_indicator,revenue_ps,float,无,1,每股营业收入,财务指标季度
+fina_indicator_quarterly,capital_rese_ps,tushare_fina_indicator,fina_indicator,capital_rese_ps,float,无,1,每股资本公积,财务指标季度
+fina_indicator_quarterly,surplus_rese_ps,tushare_fina_indicator,fina_indicator,surplus_rese_ps,float,无,1,每股盈余公积,财务指标季度
+fina_indicator_quarterly,undist_profit_ps,tushare_fina_indicator,fina_indicator,undist_profit_ps,float,无,1,每股未分配利润,财务指标季度
+fina_indicator_quarterly,extra_item,tushare_fina_indicator,fina_indicator,extra_item,float,无,1,非经常性损益,财务指标季度
+fina_indicator_quarterly,profit_dedt,tushare_fina_indicator,fina_indicator,profit_dedt,float,无,1,扣除非经常性损益后的净利润（扣非净利润）,财务指标季度
+fina_indicator_quarterly,gross_margin,tushare_fina_indicator,fina_indicator,gross_margin,float,无,1,毛利,财务指标季度
+fina_indicator_quarterly,current_ratio,tushare_fina_indicator,fina_indicator,current_ratio,float,%,1,流动比率,财务指标季度
+fina_indicator_quarterly,quick_ratio,tushare_fina_indicator,fina_indicator,quick_ratio,float,%,1,速动比率,财务指标季度
+fina_indicator_quarterly,cash_ratio,tushare_fina_indicator,fina_indicator,cash_ratio,float,%,1,保守速动比率,财务指标季度
+fina_indicator_quarterly,invturn_days,tushare_fina_indicator,fina_indicator,invturn_days,float,无,1,存货周转天数,财务指标季度
+fina_indicator_quarterly,arturn_days,tushare_fina_indicator,fina_indicator,arturn_days,float,无,1,应收账款周转天数,财务指标季度
+fina_indicator_quarterly,inv_turn,tushare_fina_indicator,fina_indicator,inv_turn,float,%,1,存货周转率,财务指标季度
+fina_indicator_quarterly,ar_turn,tushare_fina_indicator,fina_indicator,ar_turn,float,%,1,应收账款周转率,财务指标季度
+fina_indicator_quarterly,ca_turn,tushare_fina_indicator,fina_indicator,ca_turn,float,%,1,流动资产周转率,财务指标季度
+fina_indicator_quarterly,fa_turn,tushare_fina_indicator,fina_indicator,fa_turn,float,%,1,固定资产周转率,财务指标季度
+fina_indicator_quarterly,assets_turn,tushare_fina_indicator,fina_indicator,assets_turn,float,%,1,总资产周转率,财务指标季度
+fina_indicator_quarterly,op_income,tushare_fina_indicator,fina_indicator,op_income,float,无,1,经营活动净收益,财务指标季度
+fina_indicator_quarterly,valuechange_income,tushare_fina_indicator,fina_indicator,valuechange_income,float,无,1,价值变动净收益,财务指标季度
+fina_indicator_quarterly,interst_income,tushare_fina_indicator,fina_indicator,interst_income,float,无,1,利息费用,财务指标季度
+fina_indicator_quarterly,daa,tushare_fina_indicator,fina_indicator,daa,float,无,1,折旧与摊销,财务指标季度
+fina_indicator_quarterly,ebit,tushare_fina_indicator,fina_indicator,ebit,float,无,1,息税前利润,财务指标季度
+fina_indicator_quarterly,ebitda,tushare_fina_indicator,fina_indicator,ebitda,float,无,1,息税折旧摊销前利润,财务指标季度
+fina_indicator_quarterly,fcff,tushare_fina_indicator,fina_indicator,fcff,float,无,1,企业自由现金流量,财务指标季度
+fina_indicator_quarterly,fcfe,tushare_fina_indicator,fina_indicator,fcfe,float,无,1,股权自由现金流量,财务指标季度
+fina_indicator_quarterly,current_exint,tushare_fina_indicator,fina_indicator,current_exint,float,无,1,无息流动负债,财务指标季度
+fina_indicator_quarterly,noncurrent_exint,tushare_fina_indicator,fina_indicator,noncurrent_exint,float,无,1,无息非流动负债,财务指标季度
+fina_indicator_quarterly,interestdebt,tushare_fina_indicator,fina_indicator,interestdebt,float,无,1,带息债务,财务指标季度
+fina_indicator_quarterly,netdebt,tushare_fina_indicator,fina_indicator,netdebt,float,无,1,净债务,财务指标季度
+fina_indicator_quarterly,tangible_asset,tushare_fina_indicator,fina_indicator,tangible_asset,float,无,1,有形资产,财务指标季度
+fina_indicator_quarterly,working_capital,tushare_fina_indicator,fina_indicator,working_capital,float,无,1,营运资金,财务指标季度
+fina_indicator_quarterly,networking_capital,tushare_fina_indicator,fina_indicator,networking_capital,float,无,1,营运流动资本,财务指标季度
+fina_indicator_quarterly,invest_capital,tushare_fina_indicator,fina_indicator,invest_capital,float,无,1,全部投入资本,财务指标季度
+fina_indicator_quarterly,retained_earnings,tushare_fina_indicator,fina_indicator,retained_earnings,float,无,1,留存收益,财务指标季度
+fina_indicator_quarterly,diluted2_eps,tushare_fina_indicator,fina_indicator,diluted2_eps,float,无,1,期末摊薄每股收益,财务指标季度
+fina_indicator_quarterly,bps,tushare_fina_indicator,fina_indicator,bps,float,无,1,每股净资产,财务指标季度
+fina_indicator_quarterly,ocfps,tushare_fina_indicator,fina_indicator,ocfps,float,无,1,每股经营活动产生的现金流量净额,财务指标季度
+fina_indicator_quarterly,retainedps,tushare_fina_indicator,fina_indicator,retainedps,float,无,1,每股留存收益,财务指标季度
+fina_indicator_quarterly,cfps,tushare_fina_indicator,fina_indicator,cfps,float,无,1,每股现金流量净额,财务指标季度
+fina_indicator_quarterly,ebit_ps,tushare_fina_indicator,fina_indicator,ebit_ps,float,无,1,每股息税前利润,财务指标季度
+fina_indicator_quarterly,fcff_ps,tushare_fina_indicator,fina_indicator,fcff_ps,float,无,1,每股企业自由现金流量,财务指标季度
+fina_indicator_quarterly,fcfe_ps,tushare_fina_indicator,fina_indicator,fcfe_ps,float,无,1,每股股东自由现金流量,财务指标季度
+fina_indicator_quarterly,netprofit_margin,tushare_fina_indicator,fina_indicator,netprofit_margin,float,%,1,销售净利率,财务指标季度
+fina_indicator_quarterly,grossprofit_margin,tushare_fina_indicator,fina_indicator,grossprofit_margin,float,%,1,销售毛利率,财务指标季度
+fina_indicator_quarterly,cogs_of_sales,tushare_fina_indicator,fina_indicator,cogs_of_sales,float,%,1,销售成本率,财务指标季度
+fina_indicator_quarterly,expense_of_sales,tushare_fina_indicator,fina_indicator,expense_of_sales,float,%,1,销售期间费用率,财务指标季度
+fina_indicator_quarterly,profit_to_gr,tushare_fina_indicator,fina_indicator,profit_to_gr,float,无,1,净利润/营业总收入,财务指标季度
+fina_indicator_quarterly,saleexp_to_gr,tushare_fina_indicator,fina_indicator,saleexp_to_gr,float,无,1,销售费用/营业总收入,财务指标季度
+fina_indicator_quarterly,adminexp_of_gr,tushare_fina_indicator,fina_indicator,adminexp_of_gr,float,无,1,管理费用/营业总收入,财务指标季度
+fina_indicator_quarterly,finaexp_of_gr,tushare_fina_indicator,fina_indicator,finaexp_of_gr,float,无,1,财务费用/营业总收入,财务指标季度
+fina_indicator_quarterly,impai_ttm,tushare_fina_indicator,fina_indicator,impai_ttm,float,无,1,资产减值损失/营业总收入,财务指标季度
+fina_indicator_quarterly,gc_of_gr,tushare_fina_indicator,fina_indicator,gc_of_gr,float,无,1,营业总成本/营业总收入,财务指标季度
+fina_indicator_quarterly,op_of_gr,tushare_fina_indicator,fina_indicator,op_of_gr,float,无,1,营业利润/营业总收入,财务指标季度
+fina_indicator_quarterly,ebit_of_gr,tushare_fina_indicator,fina_indicator,ebit_of_gr,float,无,1,息税前利润/营业总收入,财务指标季度
+fina_indicator_quarterly,roe,tushare_fina_indicator,fina_indicator,roe,float,%,1,净资产收益率,财务指标季度
+fina_indicator_quarterly,roe_waa,tushare_fina_indicator,fina_indicator,roe_waa,float,%,1,加权平均净资产收益率,财务指标季度
+fina_indicator_quarterly,roe_dt,tushare_fina_indicator,fina_indicator,roe_dt,float,无,1,净资产收益率(扣除非经常损益),财务指标季度
+fina_indicator_quarterly,roa,tushare_fina_indicator,fina_indicator,roa,float,%,1,总资产报酬率,财务指标季度
+fina_indicator_quarterly,npta,tushare_fina_indicator,fina_indicator,npta,float,无,1,总资产净利润,财务指标季度
+fina_indicator_quarterly,roic,tushare_fina_indicator,fina_indicator,roic,float,%,1,投入资本回报率,财务指标季度
+fina_indicator_quarterly,roe_yearly,tushare_fina_indicator,fina_indicator,roe_yearly,float,%,1,年化净资产收益率,财务指标季度
+fina_indicator_quarterly,roa2_yearly,tushare_fina_indicator,fina_indicator,roa2_yearly,float,%,1,年化总资产报酬率,财务指标季度
+fina_indicator_quarterly,roe_avg,tushare_fina_indicator,fina_indicator,roe_avg,float,无,1,平均净资产收益率(增发条件),财务指标季度
+fina_indicator_quarterly,opincome_of_ebt,tushare_fina_indicator,fina_indicator,opincome_of_ebt,float,无,1,经营活动净收益/利润总额,财务指标季度
+fina_indicator_quarterly,investincome_of_ebt,tushare_fina_indicator,fina_indicator,investincome_of_ebt,float,无,1,价值变动净收益/利润总额,财务指标季度
+fina_indicator_quarterly,n_op_profit_of_ebt,tushare_fina_indicator,fina_indicator,n_op_profit_of_ebt,float,无,1,营业外收支净额/利润总额,财务指标季度
+fina_indicator_quarterly,tax_to_ebt,tushare_fina_indicator,fina_indicator,tax_to_ebt,float,无,1,所得税/利润总额,财务指标季度
+fina_indicator_quarterly,dtprofit_to_profit,tushare_fina_indicator,fina_indicator,dtprofit_to_profit,float,无,1,扣除非经常损益后的净利润/净利润,财务指标季度
+fina_indicator_quarterly,salescash_to_or,tushare_fina_indicator,fina_indicator,salescash_to_or,float,无,1,销售商品提供劳务收到的现金/营业收入,财务指标季度
+fina_indicator_quarterly,ocf_to_or,tushare_fina_indicator,fina_indicator,ocf_to_or,float,无,1,经营活动产生的现金流量净额/营业收入,财务指标季度
+fina_indicator_quarterly,ocf_to_opincome,tushare_fina_indicator,fina_indicator,ocf_to_opincome,float,无,1,经营活动产生的现金流量净额/经营活动净收益,财务指标季度
+fina_indicator_quarterly,capitalized_to_da,tushare_fina_indicator,fina_indicator,capitalized_to_da,float,无,1,资本支出/折旧和摊销,财务指标季度
+fina_indicator_quarterly,debt_to_assets,tushare_fina_indicator,fina_indicator,debt_to_assets,float,%,1,资产负债率,财务指标季度
+fina_indicator_quarterly,assets_to_eqt,tushare_fina_indicator,fina_indicator,assets_to_eqt,float,无,1,权益乘数,财务指标季度
+fina_indicator_quarterly,dp_assets_to_eqt,tushare_fina_indicator,fina_indicator,dp_assets_to_eqt,float,无,1,权益乘数(杜邦分析),财务指标季度
+fina_indicator_quarterly,ca_to_assets,tushare_fina_indicator,fina_indicator,ca_to_assets,float,无,1,流动资产/总资产,财务指标季度
+fina_indicator_quarterly,nca_to_assets,tushare_fina_indicator,fina_indicator,nca_to_assets,float,无,1,非流动资产/总资产,财务指标季度
+fina_indicator_quarterly,tbassets_to_totalassets,tushare_fina_indicator,fina_indicator,tbassets_to_totalassets,float,无,1,有形资产/总资产,财务指标季度
+fina_indicator_quarterly,int_to_talcap,tushare_fina_indicator,fina_indicator,int_to_talcap,float,无,1,带息债务/全部投入资本,财务指标季度
+fina_indicator_quarterly,eqt_to_talcapital,tushare_fina_indicator,fina_indicator,eqt_to_talcapital,float,无,1,归属于母公司的股东权益/全部投入资本,财务指标季度
+fina_indicator_quarterly,currentdebt_to_debt,tushare_fina_indicator,fina_indicator,currentdebt_to_debt,float,无,1,流动负债/负债合计,财务指标季度
+fina_indicator_quarterly,longdeb_to_debt,tushare_fina_indicator,fina_indicator,longdeb_to_debt,float,无,1,非流动负债/负债合计,财务指标季度
+fina_indicator_quarterly,ocf_to_shortdebt,tushare_fina_indicator,fina_indicator,ocf_to_shortdebt,float,无,1,经营活动产生的现金流量净额/流动负债,财务指标季度
+fina_indicator_quarterly,debt_to_eqt,tushare_fina_indicator,fina_indicator,debt_to_eqt,float,%,1,产权比率,财务指标季度
+fina_indicator_quarterly,eqt_to_debt,tushare_fina_indicator,fina_indicator,eqt_to_debt,float,无,1,归属于母公司的股东权益/负债合计,财务指标季度
+fina_indicator_quarterly,eqt_to_interestdebt,tushare_fina_indicator,fina_indicator,eqt_to_interestdebt,float,无,1,归属于母公司的股东权益/带息债务,财务指标季度
+fina_indicator_quarterly,tangibleasset_to_debt,tushare_fina_indicator,fina_indicator,tangibleasset_to_debt,float,无,1,有形资产/负债合计,财务指标季度
+fina_indicator_quarterly,tangasset_to_intdebt,tushare_fina_indicator,fina_indicator,tangasset_to_intdebt,float,无,1,有形资产/带息债务,财务指标季度
+fina_indicator_quarterly,tangibleasset_to_netdebt,tushare_fina_indicator,fina_indicator,tangibleasset_to_netdebt,float,无,1,有形资产/净债务,财务指标季度
+fina_indicator_quarterly,ocf_to_debt,tushare_fina_indicator,fina_indicator,ocf_to_debt,float,无,1,经营活动产生的现金流量净额/负债合计,财务指标季度
+fina_indicator_quarterly,ocf_to_interestdebt,tushare_fina_indicator,fina_indicator,ocf_to_interestdebt,float,无,1,经营活动产生的现金流量净额/带息债务,财务指标季度
+fina_indicator_quarterly,ocf_to_netdebt,tushare_fina_indicator,fina_indicator,ocf_to_netdebt,float,无,1,经营活动产生的现金流量净额/净债务,财务指标季度
+fina_indicator_quarterly,ebit_to_interest,tushare_fina_indicator,fina_indicator,ebit_to_interest,float,无,1,已获利息倍数(EBIT/利息费用),财务指标季度
+fina_indicator_quarterly,longdebt_to_workingcapital,tushare_fina_indicator,fina_indicator,longdebt_to_workingcapital,float,%,1,长期债务与营运资金比率,财务指标季度
+fina_indicator_quarterly,ebitda_to_debt,tushare_fina_indicator,fina_indicator,ebitda_to_debt,float,无,1,息税折旧摊销前利润/负债合计,财务指标季度
+fina_indicator_quarterly,turn_days,tushare_fina_indicator,fina_indicator,turn_days,float,无,1,营业周期,财务指标季度
+fina_indicator_quarterly,roa_yearly,tushare_fina_indicator,fina_indicator,roa_yearly,float,%,1,年化总资产净利率,财务指标季度
+fina_indicator_quarterly,roa_dp,tushare_fina_indicator,fina_indicator,roa_dp,float,无,1,总资产净利率(杜邦分析),财务指标季度
+fina_indicator_quarterly,fixed_assets,tushare_fina_indicator,fina_indicator,fixed_assets,float,无,1,固定资产合计,财务指标季度
+fina_indicator_quarterly,profit_prefin_exp,tushare_fina_indicator,fina_indicator,profit_prefin_exp,float,无,1,扣除财务费用前营业利润,财务指标季度
+fina_indicator_quarterly,non_op_profit,tushare_fina_indicator,fina_indicator,non_op_profit,float,无,1,非营业利润,财务指标季度
+fina_indicator_quarterly,op_to_ebt,tushare_fina_indicator,fina_indicator,op_to_ebt,float,无,1,营业利润／利润总额,财务指标季度
+fina_indicator_quarterly,nop_to_ebt,tushare_fina_indicator,fina_indicator,nop_to_ebt,float,无,1,非营业利润／利润总额,财务指标季度
+fina_indicator_quarterly,ocf_to_profit,tushare_fina_indicator,fina_indicator,ocf_to_profit,float,无,1,经营活动产生的现金流量净额／营业利润,财务指标季度
+fina_indicator_quarterly,cash_to_liqdebt,tushare_fina_indicator,fina_indicator,cash_to_liqdebt,float,无,1,货币资金／流动负债,财务指标季度
+fina_indicator_quarterly,cash_to_liqdebt_withinterest,tushare_fina_indicator,fina_indicator,cash_to_liqdebt_withinterest,float,无,1,货币资金／带息流动负债,财务指标季度
+fina_indicator_quarterly,op_to_liqdebt,tushare_fina_indicator,fina_indicator,op_to_liqdebt,float,无,1,营业利润／流动负债,财务指标季度
+fina_indicator_quarterly,op_to_debt,tushare_fina_indicator,fina_indicator,op_to_debt,float,无,1,营业利润／负债合计,财务指标季度
+fina_indicator_quarterly,roic_yearly,tushare_fina_indicator,fina_indicator,roic_yearly,float,%,1,年化投入资本回报率,财务指标季度
+fina_indicator_quarterly,total_fa_trun,tushare_fina_indicator,fina_indicator,total_fa_trun,float,%,1,固定资产合计周转率,财务指标季度
+fina_indicator_quarterly,profit_to_op,tushare_fina_indicator,fina_indicator,profit_to_op,float,无,1,利润总额／营业收入,财务指标季度
+fina_indicator_quarterly,q_opincome,tushare_fina_indicator,fina_indicator,q_opincome,float,无,1,经营活动单季度净收益,财务指标季度
+fina_indicator_quarterly,q_investincome,tushare_fina_indicator,fina_indicator,q_investincome,float,无,1,价值变动单季度净收益,财务指标季度
+fina_indicator_quarterly,q_dtprofit,tushare_fina_indicator,fina_indicator,q_dtprofit,float,无,1,扣除非经常损益后的单季度净利润,财务指标季度
+fina_indicator_quarterly,q_eps,tushare_fina_indicator,fina_indicator,q_eps,float,无,1,每股收益(单季度),财务指标季度
+fina_indicator_quarterly,q_netprofit_margin,tushare_fina_indicator,fina_indicator,q_netprofit_margin,float,无,1,销售净利率(单季度),财务指标季度
+fina_indicator_quarterly,q_gsprofit_margin,tushare_fina_indicator,fina_indicator,q_gsprofit_margin,float,无,1,销售毛利率(单季度),财务指标季度
+fina_indicator_quarterly,q_exp_to_sales,tushare_fina_indicator,fina_indicator,q_exp_to_sales,float,无,1,销售期间费用率(单季度),财务指标季度
+fina_indicator_quarterly,q_profit_to_gr,tushare_fina_indicator,fina_indicator,q_profit_to_gr,float,无,1,净利润／营业总收入(单季度),财务指标季度
+fina_indicator_quarterly,q_saleexp_to_gr,tushare_fina_indicator,fina_indicator,q_saleexp_to_gr,float,无,1,销售费用／营业总收入 (单季度),财务指标季度
+fina_indicator_quarterly,q_adminexp_to_gr,tushare_fina_indicator,fina_indicator,q_adminexp_to_gr,float,无,1,管理费用／营业总收入 (单季度),财务指标季度
+fina_indicator_quarterly,q_finaexp_to_gr,tushare_fina_indicator,fina_indicator,q_finaexp_to_gr,float,无,1,财务费用／营业总收入 (单季度),财务指标季度
+fina_indicator_quarterly,q_impair_to_gr_ttm,tushare_fina_indicator,fina_indicator,q_impair_to_gr_ttm,float,无,1,资产减值损失／营业总收入(单季度),财务指标季度
+fina_indicator_quarterly,q_gc_to_gr,tushare_fina_indicator,fina_indicator,q_gc_to_gr,float,无,1,营业总成本／营业总收入 (单季度),财务指标季度
+fina_indicator_quarterly,q_op_to_gr,tushare_fina_indicator,fina_indicator,q_op_to_gr,float,无,1,营业利润／营业总收入(单季度),财务指标季度
+fina_indicator_quarterly,q_roe,tushare_fina_indicator,fina_indicator,q_roe,float,无,1,净资产收益率(单季度),财务指标季度
+fina_indicator_quarterly,q_dt_roe,tushare_fina_indicator,fina_indicator,q_dt_roe,float,无,1,净资产单季度收益率(扣除非经常损益),财务指标季度
+fina_indicator_quarterly,q_npta,tushare_fina_indicator,fina_indicator,q_npta,float,无,1,总资产净利润(单季度),财务指标季度
+fina_indicator_quarterly,q_opincome_to_ebt,tushare_fina_indicator,fina_indicator,q_opincome_to_ebt,float,无,1,经营活动净收益／利润总额(单季度),财务指标季度
+fina_indicator_quarterly,q_investincome_to_ebt,tushare_fina_indicator,fina_indicator,q_investincome_to_ebt,float,无,1,价值变动净收益／利润总额(单季度),财务指标季度
+fina_indicator_quarterly,q_dtprofit_to_profit,tushare_fina_indicator,fina_indicator,q_dtprofit_to_profit,float,无,1,扣除非经常损益后的净利润／净利润(单季度),财务指标季度
+fina_indicator_quarterly,q_salescash_to_or,tushare_fina_indicator,fina_indicator,q_salescash_to_or,float,无,1,销售商品提供劳务收到的现金／营业收入(单季度),财务指标季度
+fina_indicator_quarterly,q_ocf_to_sales,tushare_fina_indicator,fina_indicator,q_ocf_to_sales,float,无,1,经营活动产生的现金流量净额／营业收入(单季度),财务指标季度
+fina_indicator_quarterly,q_ocf_to_or,tushare_fina_indicator,fina_indicator,q_ocf_to_or,float,无,1,经营活动产生的现金流量净额／经营活动净收益(单季度),财务指标季度
+fina_indicator_quarterly,basic_eps_yoy,tushare_fina_indicator,fina_indicator,basic_eps_yoy,float,%,1,基本每股收益同比增长率(%),财务指标季度
+fina_indicator_quarterly,dt_eps_yoy,tushare_fina_indicator,fina_indicator,dt_eps_yoy,float,%,1,稀释每股收益同比增长率(%),财务指标季度
+fina_indicator_quarterly,cfps_yoy,tushare_fina_indicator,fina_indicator,cfps_yoy,float,%,1,每股经营活动产生的现金流量净额同比增长率(%),财务指标季度
+fina_indicator_quarterly,op_yoy,tushare_fina_indicator,fina_indicator,op_yoy,float,%,1,营业利润同比增长率(%),财务指标季度
+fina_indicator_quarterly,ebt_yoy,tushare_fina_indicator,fina_indicator,ebt_yoy,float,%,1,利润总额同比增长率(%),财务指标季度
+fina_indicator_quarterly,netprofit_yoy,tushare_fina_indicator,fina_indicator,netprofit_yoy,float,%,1,归属母公司股东的净利润同比增长率(%),财务指标季度
+fina_indicator_quarterly,dt_netprofit_yoy,tushare_fina_indicator,fina_indicator,dt_netprofit_yoy,float,%,1,归属母公司股东的净利润-扣除非经常损益同比增长率(%),财务指标季度
+fina_indicator_quarterly,ocf_yoy,tushare_fina_indicator,fina_indicator,ocf_yoy,float,%,1,经营活动产生的现金流量净额同比增长率(%),财务指标季度
+fina_indicator_quarterly,roe_yoy,tushare_fina_indicator,fina_indicator,roe_yoy,float,%,1,净资产收益率(摊薄)同比增长率(%),财务指标季度
+fina_indicator_quarterly,bps_yoy,tushare_fina_indicator,fina_indicator,bps_yoy,float,%,1,每股净资产相对年初增长率(%),财务指标季度
+fina_indicator_quarterly,assets_yoy,tushare_fina_indicator,fina_indicator,assets_yoy,float,%,1,资产总计相对年初增长率(%),财务指标季度
+fina_indicator_quarterly,eqt_yoy,tushare_fina_indicator,fina_indicator,eqt_yoy,float,%,1,归属母公司的股东权益相对年初增长率(%),财务指标季度
+fina_indicator_quarterly,tr_yoy,tushare_fina_indicator,fina_indicator,tr_yoy,float,%,1,营业总收入同比增长率(%),财务指标季度
+fina_indicator_quarterly,or_yoy,tushare_fina_indicator,fina_indicator,or_yoy,float,%,1,营业收入同比增长率(%),财务指标季度
+fina_indicator_quarterly,q_gr_yoy,tushare_fina_indicator,fina_indicator,q_gr_yoy,float,%,1,营业总收入同比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,q_gr_qoq,tushare_fina_indicator,fina_indicator,q_gr_qoq,float,%,1,营业总收入环比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,q_sales_yoy,tushare_fina_indicator,fina_indicator,q_sales_yoy,float,%,1,营业收入同比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,q_sales_qoq,tushare_fina_indicator,fina_indicator,q_sales_qoq,float,%,1,营业收入环比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,q_op_yoy,tushare_fina_indicator,fina_indicator,q_op_yoy,float,%,1,营业利润同比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,q_op_qoq,tushare_fina_indicator,fina_indicator,q_op_qoq,float,%,1,营业利润环比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,q_profit_yoy,tushare_fina_indicator,fina_indicator,q_profit_yoy,float,%,1,净利润同比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,q_profit_qoq,tushare_fina_indicator,fina_indicator,q_profit_qoq,float,%,1,净利润环比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,q_netprofit_yoy,tushare_fina_indicator,fina_indicator,q_netprofit_yoy,float,%,1,归属母公司股东的净利润同比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,q_netprofit_qoq,tushare_fina_indicator,fina_indicator,q_netprofit_qoq,float,%,1,归属母公司股东的净利润环比增长率(%)(单季度),财务指标季度
+fina_indicator_quarterly,equity_yoy,tushare_fina_indicator,fina_indicator,equity_yoy,float,%,1,净资产同比增长率,财务指标季度
+fina_indicator_quarterly,rd_exp,tushare_fina_indicator,fina_indicator,rd_exp,float,无,1,研发费用,财务指标季度
+fina_indicator_quarterly,update_flag,tushare_fina_indicator,fina_indicator,update_flag,str,无,1,更新标识,财务指标季度
+income_quarterly,ts_code,tushare_income,income,ts_code,str,无,1,TS代码,利润表季度
+income_quarterly,ann_date,tushare_income,income,ann_date,str,无,1,公告日期,利润表季度
+income_quarterly,f_ann_date,tushare_income,income,f_ann_date,str,无,1,实际公告日期,利润表季度
+income_quarterly,end_date,tushare_income,income,end_date,str,无,1,报告期,利润表季度
+income_quarterly,report_type,tushare_income,income,report_type,str,无,1,报告类型 见底部表,利润表季度
+income_quarterly,comp_type,tushare_income,income,comp_type,str,无,1,公司类型(1一般工商业2银行3保险4证券),利润表季度
+income_quarterly,end_type,tushare_income,income,end_type,str,无,1,报告期类型,利润表季度
+income_quarterly,basic_eps,tushare_income,income,basic_eps,float,无,1,基本每股收益,利润表季度
+income_quarterly,diluted_eps,tushare_income,income,diluted_eps,float,无,1,稀释每股收益,利润表季度
+income_quarterly,total_revenue,tushare_income,income,total_revenue,float,无,1,营业总收入,利润表季度
+income_quarterly,revenue,tushare_income,income,revenue,float,无,1,营业收入,利润表季度
+income_quarterly,int_income,tushare_income,income,int_income,float,无,1,利息收入,利润表季度
+income_quarterly,prem_earned,tushare_income,income,prem_earned,float,无,1,已赚保费,利润表季度
+income_quarterly,comm_income,tushare_income,income,comm_income,float,无,1,手续费及佣金收入,利润表季度
+income_quarterly,n_commis_income,tushare_income,income,n_commis_income,float,无,1,手续费及佣金净收入,利润表季度
+income_quarterly,n_oth_income,tushare_income,income,n_oth_income,float,无,1,其他经营净收益,利润表季度
+income_quarterly,n_oth_b_income,tushare_income,income,n_oth_b_income,float,无,1,加:其他业务净收益,利润表季度
+income_quarterly,prem_income,tushare_income,income,prem_income,float,无,1,保险业务收入,利润表季度
+income_quarterly,out_prem,tushare_income,income,out_prem,float,无,1,减:分出保费,利润表季度
+income_quarterly,une_prem_reser,tushare_income,income,une_prem_reser,float,无,1,提取未到期责任准备金,利润表季度
+income_quarterly,reins_income,tushare_income,income,reins_income,float,无,1,其中:分保费收入,利润表季度
+income_quarterly,n_sec_tb_income,tushare_income,income,n_sec_tb_income,float,无,1,代理买卖证券业务净收入,利润表季度
+income_quarterly,n_sec_uw_income,tushare_income,income,n_sec_uw_income,float,无,1,证券承销业务净收入,利润表季度
+income_quarterly,n_asset_mg_income,tushare_income,income,n_asset_mg_income,float,无,1,受托客户资产管理业务净收入,利润表季度
+income_quarterly,oth_b_income,tushare_income,income,oth_b_income,float,无,1,其他业务收入,利润表季度
+income_quarterly,fv_value_chg_gain,tushare_income,income,fv_value_chg_gain,float,无,1,加:公允价值变动净收益,利润表季度
+income_quarterly,invest_income,tushare_income,income,invest_income,float,无,1,加:投资净收益,利润表季度
+income_quarterly,ass_invest_income,tushare_income,income,ass_invest_income,float,无,1,其中:对联营企业和合营企业的投资收益,利润表季度
+income_quarterly,forex_gain,tushare_income,income,forex_gain,float,无,1,加:汇兑净收益,利润表季度
+income_quarterly,total_cogs,tushare_income,income,total_cogs,float,无,1,营业总成本,利润表季度
+income_quarterly,oper_cost,tushare_income,income,oper_cost,float,无,1,减:营业成本,利润表季度
+income_quarterly,int_exp,tushare_income,income,int_exp,float,无,1,减:利息支出,利润表季度
+income_quarterly,comm_exp,tushare_income,income,comm_exp,float,无,1,减:手续费及佣金支出,利润表季度
+income_quarterly,biz_tax_surchg,tushare_income,income,biz_tax_surchg,float,无,1,减:营业税金及附加,利润表季度
+income_quarterly,sell_exp,tushare_income,income,sell_exp,float,无,1,减:销售费用,利润表季度
+income_quarterly,admin_exp,tushare_income,income,admin_exp,float,无,1,减:管理费用,利润表季度
+income_quarterly,fin_exp,tushare_income,income,fin_exp,float,无,1,减:财务费用,利润表季度
+income_quarterly,assets_impair_loss,tushare_income,income,assets_impair_loss,float,无,1,减:资产减值损失,利润表季度
+income_quarterly,prem_refund,tushare_income,income,prem_refund,float,无,1,退保金,利润表季度
+income_quarterly,compens_payout,tushare_income,income,compens_payout,float,无,1,赔付总支出,利润表季度
+income_quarterly,reser_insur_liab,tushare_income,income,reser_insur_liab,float,无,1,提取保险责任准备金,利润表季度
+income_quarterly,div_payt,tushare_income,income,div_payt,float,无,1,保户红利支出,利润表季度
+income_quarterly,reins_exp,tushare_income,income,reins_exp,float,无,1,分保费用,利润表季度
+income_quarterly,oper_exp,tushare_income,income,oper_exp,float,无,1,营业支出,利润表季度
+income_quarterly,compens_payout_refu,tushare_income,income,compens_payout_refu,float,无,1,减:摊回赔付支出,利润表季度
+income_quarterly,insur_reser_refu,tushare_income,income,insur_reser_refu,float,无,1,减:摊回保险责任准备金,利润表季度
+income_quarterly,reins_cost_refund,tushare_income,income,reins_cost_refund,float,无,1,减:摊回分保费用,利润表季度
+income_quarterly,other_bus_cost,tushare_income,income,other_bus_cost,float,无,1,其他业务成本,利润表季度
+income_quarterly,operate_profit,tushare_income,income,operate_profit,float,无,1,营业利润,利润表季度
+income_quarterly,non_oper_income,tushare_income,income,non_oper_income,float,无,1,加:营业外收入,利润表季度
+income_quarterly,non_oper_exp,tushare_income,income,non_oper_exp,float,无,1,减:营业外支出,利润表季度
+income_quarterly,nca_disploss,tushare_income,income,nca_disploss,float,无,1,其中:减:非流动资产处置净损失,利润表季度
+income_quarterly,total_profit,tushare_income,income,total_profit,float,无,1,利润总额,利润表季度
+income_quarterly,income_tax,tushare_income,income,income_tax,float,无,1,所得税费用,利润表季度
+income_quarterly,n_income,tushare_income,income,n_income,float,无,1,净利润(含少数股东损益),利润表季度
+income_quarterly,n_income_attr_p,tushare_income,income,n_income_attr_p,float,无,1,净利润(不含少数股东损益),利润表季度
+income_quarterly,minority_gain,tushare_income,income,minority_gain,float,无,1,少数股东损益,利润表季度
+income_quarterly,oth_compr_income,tushare_income,income,oth_compr_income,float,无,1,其他综合收益,利润表季度
+income_quarterly,t_compr_income,tushare_income,income,t_compr_income,float,无,1,综合收益总额,利润表季度
+income_quarterly,compr_inc_attr_p,tushare_income,income,compr_inc_attr_p,float,无,1,归属于母公司(或股东)的综合收益总额,利润表季度
+income_quarterly,compr_inc_attr_m_s,tushare_income,income,compr_inc_attr_m_s,float,无,1,归属于少数股东的综合收益总额,利润表季度
+income_quarterly,ebit,tushare_income,income,ebit,float,无,1,息税前利润,利润表季度
+income_quarterly,ebitda,tushare_income,income,ebitda,float,无,1,息税折旧摊销前利润,利润表季度
+income_quarterly,insurance_exp,tushare_income,income,insurance_exp,float,无,1,保险业务支出,利润表季度
+income_quarterly,undist_profit,tushare_income,income,undist_profit,float,无,1,年初未分配利润,利润表季度
+income_quarterly,distable_profit,tushare_income,income,distable_profit,float,无,1,可分配利润,利润表季度
+income_quarterly,rd_exp,tushare_income,income,rd_exp,float,无,1,研发费用,利润表季度
+income_quarterly,fin_exp_int_exp,tushare_income,income,fin_exp_int_exp,float,无,1,财务费用:利息费用,利润表季度
+income_quarterly,fin_exp_int_inc,tushare_income,income,fin_exp_int_inc,float,无,1,财务费用:利息收入,利润表季度
+income_quarterly,transfer_surplus_rese,tushare_income,income,transfer_surplus_rese,float,无,1,盈余公积转入,利润表季度
+income_quarterly,transfer_housing_imprest,tushare_income,income,transfer_housing_imprest,float,无,1,住房周转金转入,利润表季度
+income_quarterly,transfer_oth,tushare_income,income,transfer_oth,float,无,1,其他转入,利润表季度
+income_quarterly,adj_lossgain,tushare_income,income,adj_lossgain,float,无,1,调整以前年度损益,利润表季度
+income_quarterly,withdra_legal_surplus,tushare_income,income,withdra_legal_surplus,float,无,1,提取法定盈余公积,利润表季度
+income_quarterly,withdra_legal_pubfund,tushare_income,income,withdra_legal_pubfund,float,无,1,提取法定公益金,利润表季度
+income_quarterly,withdra_biz_devfund,tushare_income,income,withdra_biz_devfund,float,无,1,提取企业发展基金,利润表季度
+income_quarterly,withdra_rese_fund,tushare_income,income,withdra_rese_fund,float,无,1,提取储备基金,利润表季度
+income_quarterly,withdra_oth_ersu,tushare_income,income,withdra_oth_ersu,float,无,1,提取任意盈余公积金,利润表季度
+income_quarterly,workers_welfare,tushare_income,income,workers_welfare,float,无,1,职工奖金福利,利润表季度
+income_quarterly,distr_profit_shrhder,tushare_income,income,distr_profit_shrhder,float,无,1,可供股东分配的利润,利润表季度
+income_quarterly,prfshare_payable_dvd,tushare_income,income,prfshare_payable_dvd,float,无,1,应付优先股股利,利润表季度
+income_quarterly,comshare_payable_dvd,tushare_income,income,comshare_payable_dvd,float,无,1,应付普通股股利,利润表季度
+income_quarterly,capit_comstock_div,tushare_income,income,capit_comstock_div,float,无,1,转作股本的普通股股利,利润表季度
+income_quarterly,net_after_nr_lp_correct,tushare_income,income,net_after_nr_lp_correct,float,无,1,扣除非经常性损益后的净利润（更正前）,利润表季度
+income_quarterly,credit_impa_loss,tushare_income,income,credit_impa_loss,float,无,1,信用减值损失,利润表季度
+income_quarterly,net_expo_hedging_benefits,tushare_income,income,net_expo_hedging_benefits,float,无,1,净敞口套期收益,利润表季度
+income_quarterly,oth_impair_loss_assets,tushare_income,income,oth_impair_loss_assets,float,无,1,其他资产减值损失,利润表季度
+income_quarterly,total_opcost,tushare_income,income,total_opcost,float,无,1,营业总成本（二）,利润表季度
+income_quarterly,amodcost_fin_assets,tushare_income,income,amodcost_fin_assets,float,无,1,以摊余成本计量的金融资产终止确认收益,利润表季度
+income_quarterly,oth_income,tushare_income,income,oth_income,float,无,1,其他收益,利润表季度
+income_quarterly,asset_disp_income,tushare_income,income,asset_disp_income,float,无,1,资产处置收益,利润表季度
+income_quarterly,continued_net_profit,tushare_income,income,continued_net_profit,float,无,1,持续经营净利润,利润表季度
+income_quarterly,end_net_profit,tushare_income,income,end_net_profit,float,无,1,终止经营净利润,利润表季度
+income_quarterly,update_flag,tushare_income,income,update_flag,str,无,1,更新标识,利润表季度
+balancesheet_quarterly,ts_code,tushare_balancesheet,balancesheet,ts_code,str,无,1,TS股票代码,资产负债表季度
+balancesheet_quarterly,ann_date,tushare_balancesheet,balancesheet,ann_date,str,无,1,公告日期,资产负债表季度
+balancesheet_quarterly,f_ann_date,tushare_balancesheet,balancesheet,f_ann_date,str,无,1,实际公告日期,资产负债表季度
+balancesheet_quarterly,end_date,tushare_balancesheet,balancesheet,end_date,str,无,1,报告期,资产负债表季度
+balancesheet_quarterly,report_type,tushare_balancesheet,balancesheet,report_type,str,无,1,报表类型,资产负债表季度
+balancesheet_quarterly,comp_type,tushare_balancesheet,balancesheet,comp_type,str,无,1,公司类型(1一般工商业2银行3保险4证券),资产负债表季度
+balancesheet_quarterly,end_type,tushare_balancesheet,balancesheet,end_type,str,无,1,报告期类型,资产负债表季度
+balancesheet_quarterly,total_share,tushare_balancesheet,balancesheet,total_share,float,无,1,期末总股本,资产负债表季度
+balancesheet_quarterly,cap_rese,tushare_balancesheet,balancesheet,cap_rese,float,无,1,资本公积金,资产负债表季度
+balancesheet_quarterly,undistr_porfit,tushare_balancesheet,balancesheet,undistr_porfit,float,无,1,未分配利润,资产负债表季度
+balancesheet_quarterly,surplus_rese,tushare_balancesheet,balancesheet,surplus_rese,float,无,1,盈余公积金,资产负债表季度
+balancesheet_quarterly,special_rese,tushare_balancesheet,balancesheet,special_rese,float,无,1,专项储备,资产负债表季度
+balancesheet_quarterly,money_cap,tushare_balancesheet,balancesheet,money_cap,float,无,1,货币资金,资产负债表季度
+balancesheet_quarterly,trad_asset,tushare_balancesheet,balancesheet,trad_asset,float,无,1,交易性金融资产,资产负债表季度
+balancesheet_quarterly,notes_receiv,tushare_balancesheet,balancesheet,notes_receiv,float,无,1,应收票据,资产负债表季度
+balancesheet_quarterly,accounts_receiv,tushare_balancesheet,balancesheet,accounts_receiv,float,无,1,应收账款,资产负债表季度
+balancesheet_quarterly,oth_receiv,tushare_balancesheet,balancesheet,oth_receiv,float,无,1,其他应收款,资产负债表季度
+balancesheet_quarterly,prepayment,tushare_balancesheet,balancesheet,prepayment,float,无,1,预付款项,资产负债表季度
+balancesheet_quarterly,div_receiv,tushare_balancesheet,balancesheet,div_receiv,float,无,1,应收股利,资产负债表季度
+balancesheet_quarterly,int_receiv,tushare_balancesheet,balancesheet,int_receiv,float,无,1,应收利息,资产负债表季度
+balancesheet_quarterly,inventories,tushare_balancesheet,balancesheet,inventories,float,无,1,存货,资产负债表季度
+balancesheet_quarterly,amor_exp,tushare_balancesheet,balancesheet,amor_exp,float,无,1,待摊费用,资产负债表季度
+balancesheet_quarterly,nca_within_1y,tushare_balancesheet,balancesheet,nca_within_1y,float,无,1,一年内到期的非流动资产,资产负债表季度
+balancesheet_quarterly,sett_rsrv,tushare_balancesheet,balancesheet,sett_rsrv,float,无,1,结算备付金,资产负债表季度
+balancesheet_quarterly,loanto_oth_bank_fi,tushare_balancesheet,balancesheet,loanto_oth_bank_fi,float,无,1,拆出资金,资产负债表季度
+balancesheet_quarterly,premium_receiv,tushare_balancesheet,balancesheet,premium_receiv,float,无,1,应收保费,资产负债表季度
+balancesheet_quarterly,reinsur_receiv,tushare_balancesheet,balancesheet,reinsur_receiv,float,无,1,应收分保账款,资产负债表季度
+balancesheet_quarterly,reinsur_res_receiv,tushare_balancesheet,balancesheet,reinsur_res_receiv,float,无,1,应收分保合同准备金,资产负债表季度
+balancesheet_quarterly,pur_resale_fa,tushare_balancesheet,balancesheet,pur_resale_fa,float,无,1,买入返售金融资产,资产负债表季度
+balancesheet_quarterly,oth_cur_assets,tushare_balancesheet,balancesheet,oth_cur_assets,float,无,1,其他流动资产,资产负债表季度
+balancesheet_quarterly,total_cur_assets,tushare_balancesheet,balancesheet,total_cur_assets,float,无,1,流动资产合计,资产负债表季度
+balancesheet_quarterly,fa_avail_for_sale,tushare_balancesheet,balancesheet,fa_avail_for_sale,float,无,1,可供出售金融资产,资产负债表季度
+balancesheet_quarterly,htm_invest,tushare_balancesheet,balancesheet,htm_invest,float,无,1,持有至到期投资,资产负债表季度
+balancesheet_quarterly,lt_eqt_invest,tushare_balancesheet,balancesheet,lt_eqt_invest,float,无,1,长期股权投资,资产负债表季度
+balancesheet_quarterly,invest_real_estate,tushare_balancesheet,balancesheet,invest_real_estate,float,无,1,投资性房地产,资产负债表季度
+balancesheet_quarterly,time_deposits,tushare_balancesheet,balancesheet,time_deposits,float,无,1,定期存款,资产负债表季度
+balancesheet_quarterly,oth_assets,tushare_balancesheet,balancesheet,oth_assets,float,无,1,其他资产,资产负债表季度
+balancesheet_quarterly,lt_rec,tushare_balancesheet,balancesheet,lt_rec,float,无,1,长期应收款,资产负债表季度
+balancesheet_quarterly,fix_assets,tushare_balancesheet,balancesheet,fix_assets,float,无,1,固定资产,资产负债表季度
+balancesheet_quarterly,cip,tushare_balancesheet,balancesheet,cip,float,无,1,在建工程,资产负债表季度
+balancesheet_quarterly,const_materials,tushare_balancesheet,balancesheet,const_materials,float,无,1,工程物资,资产负债表季度
+balancesheet_quarterly,fixed_assets_disp,tushare_balancesheet,balancesheet,fixed_assets_disp,float,无,1,固定资产清理,资产负债表季度
+balancesheet_quarterly,produc_bio_assets,tushare_balancesheet,balancesheet,produc_bio_assets,float,无,1,生产性生物资产,资产负债表季度
+balancesheet_quarterly,oil_and_gas_assets,tushare_balancesheet,balancesheet,oil_and_gas_assets,float,无,1,油气资产,资产负债表季度
+balancesheet_quarterly,intan_assets,tushare_balancesheet,balancesheet,intan_assets,float,无,1,无形资产,资产负债表季度
+balancesheet_quarterly,r_and_d,tushare_balancesheet,balancesheet,r_and_d,float,无,1,研发支出,资产负债表季度
+balancesheet_quarterly,goodwill,tushare_balancesheet,balancesheet,goodwill,float,无,1,商誉,资产负债表季度
+balancesheet_quarterly,lt_amor_exp,tushare_balancesheet,balancesheet,lt_amor_exp,float,无,1,长期待摊费用,资产负债表季度
+balancesheet_quarterly,defer_tax_assets,tushare_balancesheet,balancesheet,defer_tax_assets,float,无,1,递延所得税资产,资产负债表季度
+balancesheet_quarterly,decr_in_disbur,tushare_balancesheet,balancesheet,decr_in_disbur,float,无,1,发放贷款及垫款,资产负债表季度
+balancesheet_quarterly,oth_nca,tushare_balancesheet,balancesheet,oth_nca,float,无,1,其他非流动资产,资产负债表季度
+balancesheet_quarterly,total_nca,tushare_balancesheet,balancesheet,total_nca,float,无,1,非流动资产合计,资产负债表季度
+balancesheet_quarterly,cash_reser_cb,tushare_balancesheet,balancesheet,cash_reser_cb,float,无,1,现金及存放中央银行款项,资产负债表季度
+balancesheet_quarterly,depos_in_oth_bfi,tushare_balancesheet,balancesheet,depos_in_oth_bfi,float,无,1,存放同业和其它金融机构款项,资产负债表季度
+balancesheet_quarterly,prec_metals,tushare_balancesheet,balancesheet,prec_metals,float,无,1,贵金属,资产负债表季度
+balancesheet_quarterly,deriv_assets,tushare_balancesheet,balancesheet,deriv_assets,float,无,1,衍生金融资产,资产负债表季度
+balancesheet_quarterly,rr_reins_une_prem,tushare_balancesheet,balancesheet,rr_reins_une_prem,float,无,1,应收分保未到期责任准备金,资产负债表季度
+balancesheet_quarterly,rr_reins_outstd_cla,tushare_balancesheet,balancesheet,rr_reins_outstd_cla,float,无,1,应收分保未决赔款准备金,资产负债表季度
+balancesheet_quarterly,rr_reins_lins_liab,tushare_balancesheet,balancesheet,rr_reins_lins_liab,float,无,1,应收分保寿险责任准备金,资产负债表季度
+balancesheet_quarterly,rr_reins_lthins_liab,tushare_balancesheet,balancesheet,rr_reins_lthins_liab,float,无,1,应收分保长期健康险责任准备金,资产负债表季度
+balancesheet_quarterly,refund_depos,tushare_balancesheet,balancesheet,refund_depos,float,无,1,存出保证金,资产负债表季度
+balancesheet_quarterly,ph_pledge_loans,tushare_balancesheet,balancesheet,ph_pledge_loans,float,无,1,保户质押贷款,资产负债表季度
+balancesheet_quarterly,refund_cap_depos,tushare_balancesheet,balancesheet,refund_cap_depos,float,无,1,存出资本保证金,资产负债表季度
+balancesheet_quarterly,indep_acct_assets,tushare_balancesheet,balancesheet,indep_acct_assets,float,无,1,独立账户资产,资产负债表季度
+balancesheet_quarterly,client_depos,tushare_balancesheet,balancesheet,client_depos,float,无,1,其中：客户资金存款,资产负债表季度
+balancesheet_quarterly,client_prov,tushare_balancesheet,balancesheet,client_prov,float,无,1,其中：客户备付金,资产负债表季度
+balancesheet_quarterly,transac_seat_fee,tushare_balancesheet,balancesheet,transac_seat_fee,float,无,1,其中:交易席位费,资产负债表季度
+balancesheet_quarterly,invest_as_receiv,tushare_balancesheet,balancesheet,invest_as_receiv,float,无,1,应收款项类投资,资产负债表季度
+balancesheet_quarterly,total_assets,tushare_balancesheet,balancesheet,total_assets,float,无,1,资产总计,资产负债表季度
+balancesheet_quarterly,lt_borr,tushare_balancesheet,balancesheet,lt_borr,float,无,1,长期借款,资产负债表季度
+balancesheet_quarterly,st_borr,tushare_balancesheet,balancesheet,st_borr,float,无,1,短期借款,资产负债表季度
+balancesheet_quarterly,cb_borr,tushare_balancesheet,balancesheet,cb_borr,float,无,1,向中央银行借款,资产负债表季度
+balancesheet_quarterly,depos_ib_deposits,tushare_balancesheet,balancesheet,depos_ib_deposits,float,无,1,吸收存款及同业存放,资产负债表季度
+balancesheet_quarterly,loan_oth_bank,tushare_balancesheet,balancesheet,loan_oth_bank,float,无,1,拆入资金,资产负债表季度
+balancesheet_quarterly,trading_fl,tushare_balancesheet,balancesheet,trading_fl,float,无,1,交易性金融负债,资产负债表季度
+balancesheet_quarterly,notes_payable,tushare_balancesheet,balancesheet,notes_payable,float,无,1,应付票据,资产负债表季度
+balancesheet_quarterly,acct_payable,tushare_balancesheet,balancesheet,acct_payable,float,无,1,应付账款,资产负债表季度
+balancesheet_quarterly,adv_receipts,tushare_balancesheet,balancesheet,adv_receipts,float,无,1,预收款项,资产负债表季度
+balancesheet_quarterly,sold_for_repur_fa,tushare_balancesheet,balancesheet,sold_for_repur_fa,float,无,1,卖出回购金融资产款,资产负债表季度
+balancesheet_quarterly,comm_payable,tushare_balancesheet,balancesheet,comm_payable,float,无,1,应付手续费及佣金,资产负债表季度
+balancesheet_quarterly,payroll_payable,tushare_balancesheet,balancesheet,payroll_payable,float,无,1,应付职工薪酬,资产负债表季度
+balancesheet_quarterly,taxes_payable,tushare_balancesheet,balancesheet,taxes_payable,float,无,1,应交税费,资产负债表季度
+balancesheet_quarterly,int_payable,tushare_balancesheet,balancesheet,int_payable,float,无,1,应付利息,资产负债表季度
+balancesheet_quarterly,div_payable,tushare_balancesheet,balancesheet,div_payable,float,无,1,应付股利,资产负债表季度
+balancesheet_quarterly,oth_payable,tushare_balancesheet,balancesheet,oth_payable,float,无,1,其他应付款,资产负债表季度
+balancesheet_quarterly,acc_exp,tushare_balancesheet,balancesheet,acc_exp,float,无,1,预提费用,资产负债表季度
+balancesheet_quarterly,deferred_inc,tushare_balancesheet,balancesheet,deferred_inc,float,无,1,递延收益,资产负债表季度
+balancesheet_quarterly,st_bonds_payable,tushare_balancesheet,balancesheet,st_bonds_payable,float,无,1,应付短期债券,资产负债表季度
+balancesheet_quarterly,payable_to_reinsurer,tushare_balancesheet,balancesheet,payable_to_reinsurer,float,无,1,应付分保账款,资产负债表季度
+balancesheet_quarterly,rsrv_insur_cont,tushare_balancesheet,balancesheet,rsrv_insur_cont,float,无,1,保险合同准备金,资产负债表季度
+balancesheet_quarterly,acting_trading_sec,tushare_balancesheet,balancesheet,acting_trading_sec,float,无,1,代理买卖证券款,资产负债表季度
+balancesheet_quarterly,acting_uw_sec,tushare_balancesheet,balancesheet,acting_uw_sec,float,无,1,代理承销证券款,资产负债表季度
+balancesheet_quarterly,non_cur_liab_due_1y,tushare_balancesheet,balancesheet,non_cur_liab_due_1y,float,无,1,一年内到期的非流动负债,资产负债表季度
+balancesheet_quarterly,oth_cur_liab,tushare_balancesheet,balancesheet,oth_cur_liab,float,无,1,其他流动负债,资产负债表季度
+balancesheet_quarterly,total_cur_liab,tushare_balancesheet,balancesheet,total_cur_liab,float,无,1,流动负债合计,资产负债表季度
+balancesheet_quarterly,bond_payable,tushare_balancesheet,balancesheet,bond_payable,float,无,1,应付债券,资产负债表季度
+balancesheet_quarterly,lt_payable,tushare_balancesheet,balancesheet,lt_payable,float,无,1,长期应付款,资产负债表季度
+balancesheet_quarterly,specific_payables,tushare_balancesheet,balancesheet,specific_payables,float,无,1,专项应付款,资产负债表季度
+balancesheet_quarterly,estimated_liab,tushare_balancesheet,balancesheet,estimated_liab,float,无,1,预计负债,资产负债表季度
+balancesheet_quarterly,defer_tax_liab,tushare_balancesheet,balancesheet,defer_tax_liab,float,无,1,递延所得税负债,资产负债表季度
+balancesheet_quarterly,defer_inc_non_cur_liab,tushare_balancesheet,balancesheet,defer_inc_non_cur_liab,float,无,1,递延收益-非流动负债,资产负债表季度
+balancesheet_quarterly,oth_ncl,tushare_balancesheet,balancesheet,oth_ncl,float,无,1,其他非流动负债,资产负债表季度
+balancesheet_quarterly,total_ncl,tushare_balancesheet,balancesheet,total_ncl,float,无,1,非流动负债合计,资产负债表季度
+balancesheet_quarterly,depos_oth_bfi,tushare_balancesheet,balancesheet,depos_oth_bfi,float,无,1,同业和其它金融机构存放款项,资产负债表季度
+balancesheet_quarterly,deriv_liab,tushare_balancesheet,balancesheet,deriv_liab,float,无,1,衍生金融负债,资产负债表季度
+balancesheet_quarterly,depos,tushare_balancesheet,balancesheet,depos,float,无,1,吸收存款,资产负债表季度
+balancesheet_quarterly,agency_bus_liab,tushare_balancesheet,balancesheet,agency_bus_liab,float,无,1,代理业务负债,资产负债表季度
+balancesheet_quarterly,oth_liab,tushare_balancesheet,balancesheet,oth_liab,float,无,1,其他负债,资产负债表季度
+balancesheet_quarterly,prem_receiv_adva,tushare_balancesheet,balancesheet,prem_receiv_adva,float,无,1,预收保费,资产负债表季度
+balancesheet_quarterly,depos_received,tushare_balancesheet,balancesheet,depos_received,float,无,1,存入保证金,资产负债表季度
+balancesheet_quarterly,ph_invest,tushare_balancesheet,balancesheet,ph_invest,float,无,1,保户储金及投资款,资产负债表季度
+balancesheet_quarterly,reser_une_prem,tushare_balancesheet,balancesheet,reser_une_prem,float,无,1,未到期责任准备金,资产负债表季度
+balancesheet_quarterly,reser_outstd_claims,tushare_balancesheet,balancesheet,reser_outstd_claims,float,无,1,未决赔款准备金,资产负债表季度
+balancesheet_quarterly,reser_lins_liab,tushare_balancesheet,balancesheet,reser_lins_liab,float,无,1,寿险责任准备金,资产负债表季度
+balancesheet_quarterly,reser_lthins_liab,tushare_balancesheet,balancesheet,reser_lthins_liab,float,无,1,长期健康险责任准备金,资产负债表季度
+balancesheet_quarterly,indept_acc_liab,tushare_balancesheet,balancesheet,indept_acc_liab,float,无,1,独立账户负债,资产负债表季度
+balancesheet_quarterly,pledge_borr,tushare_balancesheet,balancesheet,pledge_borr,float,无,1,其中:质押借款,资产负债表季度
+balancesheet_quarterly,indem_payable,tushare_balancesheet,balancesheet,indem_payable,float,无,1,应付赔付款,资产负债表季度
+balancesheet_quarterly,policy_div_payable,tushare_balancesheet,balancesheet,policy_div_payable,float,无,1,应付保单红利,资产负债表季度
+balancesheet_quarterly,total_liab,tushare_balancesheet,balancesheet,total_liab,float,无,1,负债合计,资产负债表季度
+balancesheet_quarterly,treasury_share,tushare_balancesheet,balancesheet,treasury_share,float,无,1,减:库存股,资产负债表季度
+balancesheet_quarterly,ordin_risk_reser,tushare_balancesheet,balancesheet,ordin_risk_reser,float,无,1,一般风险准备,资产负债表季度
+balancesheet_quarterly,forex_differ,tushare_balancesheet,balancesheet,forex_differ,float,无,1,外币报表折算差额,资产负债表季度
+balancesheet_quarterly,invest_loss_unconf,tushare_balancesheet,balancesheet,invest_loss_unconf,float,无,1,未确认的投资损失,资产负债表季度
+balancesheet_quarterly,minority_int,tushare_balancesheet,balancesheet,minority_int,float,无,1,少数股东权益,资产负债表季度
+balancesheet_quarterly,total_hldr_eqy_exc_min_int,tushare_balancesheet,balancesheet,total_hldr_eqy_exc_min_int,float,无,1,股东权益合计(不含少数股东权益),资产负债表季度
+balancesheet_quarterly,total_hldr_eqy_inc_min_int,tushare_balancesheet,balancesheet,total_hldr_eqy_inc_min_int,float,无,1,股东权益合计(含少数股东权益),资产负债表季度
+balancesheet_quarterly,total_liab_hldr_eqy,tushare_balancesheet,balancesheet,total_liab_hldr_eqy,float,无,1,负债及股东权益总计,资产负债表季度
+balancesheet_quarterly,lt_payroll_payable,tushare_balancesheet,balancesheet,lt_payroll_payable,float,无,1,长期应付职工薪酬,资产负债表季度
+balancesheet_quarterly,oth_comp_income,tushare_balancesheet,balancesheet,oth_comp_income,float,无,1,其他综合收益,资产负债表季度
+balancesheet_quarterly,oth_eqt_tools,tushare_balancesheet,balancesheet,oth_eqt_tools,float,无,1,其他权益工具,资产负债表季度
+balancesheet_quarterly,oth_eqt_tools_p_shr,tushare_balancesheet,balancesheet,oth_eqt_tools_p_shr,float,无,1,其他权益工具(优先股),资产负债表季度
+balancesheet_quarterly,lending_funds,tushare_balancesheet,balancesheet,lending_funds,float,无,1,融出资金,资产负债表季度
+balancesheet_quarterly,acc_receivable,tushare_balancesheet,balancesheet,acc_receivable,float,无,1,应收款项,资产负债表季度
+balancesheet_quarterly,st_fin_payable,tushare_balancesheet,balancesheet,st_fin_payable,float,无,1,应付短期融资款,资产负债表季度
+balancesheet_quarterly,payables,tushare_balancesheet,balancesheet,payables,float,无,1,应付款项,资产负债表季度
+balancesheet_quarterly,hfs_assets,tushare_balancesheet,balancesheet,hfs_assets,float,无,1,持有待售的资产,资产负债表季度
+balancesheet_quarterly,hfs_sales,tushare_balancesheet,balancesheet,hfs_sales,float,无,1,持有待售的负债,资产负债表季度
+balancesheet_quarterly,cost_fin_assets,tushare_balancesheet,balancesheet,cost_fin_assets,float,无,1,以摊余成本计量的金融资产,资产负债表季度
+balancesheet_quarterly,fair_value_fin_assets,tushare_balancesheet,balancesheet,fair_value_fin_assets,float,无,1,以公允价值计量且其变动计入其他综合收益的金融资产,资产负债表季度
+balancesheet_quarterly,cip_total,tushare_balancesheet,balancesheet,cip_total,float,元,1,在建工程(合计)(元),资产负债表季度
+balancesheet_quarterly,oth_pay_total,tushare_balancesheet,balancesheet,oth_pay_total,float,元,1,其他应付款(合计)(元),资产负债表季度
+balancesheet_quarterly,long_pay_total,tushare_balancesheet,balancesheet,long_pay_total,float,元,1,长期应付款(合计)(元),资产负债表季度
+balancesheet_quarterly,debt_invest,tushare_balancesheet,balancesheet,debt_invest,float,元,1,债权投资(元),资产负债表季度
+balancesheet_quarterly,oth_debt_invest,tushare_balancesheet,balancesheet,oth_debt_invest,float,元,1,其他债权投资(元),资产负债表季度
+balancesheet_quarterly,oth_eq_invest,tushare_balancesheet,balancesheet,oth_eq_invest,float,元,1,其他权益工具投资(元),资产负债表季度
+balancesheet_quarterly,oth_illiq_fin_assets,tushare_balancesheet,balancesheet,oth_illiq_fin_assets,float,元,1,其他非流动金融资产(元),资产负债表季度
+balancesheet_quarterly,oth_eq_ppbond,tushare_balancesheet,balancesheet,oth_eq_ppbond,float,元,1,其他权益工具:永续债(元),资产负债表季度
+balancesheet_quarterly,receiv_financing,tushare_balancesheet,balancesheet,receiv_financing,float,无,1,应收款项融资,资产负债表季度
+balancesheet_quarterly,use_right_assets,tushare_balancesheet,balancesheet,use_right_assets,float,无,1,使用权资产,资产负债表季度
+balancesheet_quarterly,lease_liab,tushare_balancesheet,balancesheet,lease_liab,float,无,1,租赁负债,资产负债表季度
+balancesheet_quarterly,contract_assets,tushare_balancesheet,balancesheet,contract_assets,float,无,1,合同资产,资产负债表季度
+balancesheet_quarterly,contract_liab,tushare_balancesheet,balancesheet,contract_liab,float,无,1,合同负债,资产负债表季度
+balancesheet_quarterly,accounts_receiv_bill,tushare_balancesheet,balancesheet,accounts_receiv_bill,float,无,1,应收票据及应收账款,资产负债表季度
+balancesheet_quarterly,accounts_pay,tushare_balancesheet,balancesheet,accounts_pay,float,无,1,应付票据及应付账款,资产负债表季度
+balancesheet_quarterly,oth_rcv_total,tushare_balancesheet,balancesheet,oth_rcv_total,float,元,1,其他应收款(合计)（元）,资产负债表季度
+balancesheet_quarterly,fix_assets_total,tushare_balancesheet,balancesheet,fix_assets_total,float,元,1,固定资产(合计)(元),资产负债表季度
+balancesheet_quarterly,update_flag,tushare_balancesheet,balancesheet,update_flag,str,无,1,更新标识,资产负债表季度
+cashflow_quarterly,ts_code,tushare_cashflow,cashflow,ts_code,str,无,1,TS股票代码,现金流量表季度
+cashflow_quarterly,ann_date,tushare_cashflow,cashflow,ann_date,str,无,1,公告日期,现金流量表季度
+cashflow_quarterly,f_ann_date,tushare_cashflow,cashflow,f_ann_date,str,无,1,实际公告日期,现金流量表季度
+cashflow_quarterly,end_date,tushare_cashflow,cashflow,end_date,str,无,1,报告期,现金流量表季度
+cashflow_quarterly,comp_type,tushare_cashflow,cashflow,comp_type,str,无,1,公司类型(1一般工商业2银行3保险4证券),现金流量表季度
+cashflow_quarterly,report_type,tushare_cashflow,cashflow,report_type,str,无,1,报表类型,现金流量表季度
+cashflow_quarterly,end_type,tushare_cashflow,cashflow,end_type,str,无,1,报告期类型,现金流量表季度
+cashflow_quarterly,net_profit,tushare_cashflow,cashflow,net_profit,float,无,1,净利润,现金流量表季度
+cashflow_quarterly,finan_exp,tushare_cashflow,cashflow,finan_exp,float,无,1,财务费用,现金流量表季度
+cashflow_quarterly,c_fr_sale_sg,tushare_cashflow,cashflow,c_fr_sale_sg,float,无,1,销售商品、提供劳务收到的现金,现金流量表季度
+cashflow_quarterly,recp_tax_rends,tushare_cashflow,cashflow,recp_tax_rends,float,无,1,收到的税费返还,现金流量表季度
+cashflow_quarterly,n_depos_incr_fi,tushare_cashflow,cashflow,n_depos_incr_fi,float,无,1,客户存款和同业存放款项净增加额,现金流量表季度
+cashflow_quarterly,n_incr_loans_cb,tushare_cashflow,cashflow,n_incr_loans_cb,float,无,1,向中央银行借款净增加额,现金流量表季度
+cashflow_quarterly,n_inc_borr_oth_fi,tushare_cashflow,cashflow,n_inc_borr_oth_fi,float,无,1,向其他金融机构拆入资金净增加额,现金流量表季度
+cashflow_quarterly,prem_fr_orig_contr,tushare_cashflow,cashflow,prem_fr_orig_contr,float,无,1,收到原保险合同保费取得的现金,现金流量表季度
+cashflow_quarterly,n_incr_insured_dep,tushare_cashflow,cashflow,n_incr_insured_dep,float,无,1,保户储金净增加额,现金流量表季度
+cashflow_quarterly,n_reinsur_prem,tushare_cashflow,cashflow,n_reinsur_prem,float,无,1,收到再保业务现金净额,现金流量表季度
+cashflow_quarterly,n_incr_disp_tfa,tushare_cashflow,cashflow,n_incr_disp_tfa,float,无,1,处置交易性金融资产净增加额,现金流量表季度
+cashflow_quarterly,ifc_cash_incr,tushare_cashflow,cashflow,ifc_cash_incr,float,无,1,收取利息和手续费净增加额,现金流量表季度
+cashflow_quarterly,n_incr_disp_faas,tushare_cashflow,cashflow,n_incr_disp_faas,float,无,1,处置可供出售金融资产净增加额,现金流量表季度
+cashflow_quarterly,n_incr_loans_oth_bank,tushare_cashflow,cashflow,n_incr_loans_oth_bank,float,无,1,拆入资金净增加额,现金流量表季度
+cashflow_quarterly,n_cap_incr_repur,tushare_cashflow,cashflow,n_cap_incr_repur,float,无,1,回购业务资金净增加额,现金流量表季度
+cashflow_quarterly,c_fr_oth_operate_a,tushare_cashflow,cashflow,c_fr_oth_operate_a,float,无,1,收到其他与经营活动有关的现金,现金流量表季度
+cashflow_quarterly,c_inf_fr_operate_a,tushare_cashflow,cashflow,c_inf_fr_operate_a,float,无,1,经营活动现金流入小计,现金流量表季度
+cashflow_quarterly,c_paid_goods_s,tushare_cashflow,cashflow,c_paid_goods_s,float,无,1,购买商品、接受劳务支付的现金,现金流量表季度
+cashflow_quarterly,c_paid_to_for_empl,tushare_cashflow,cashflow,c_paid_to_for_empl,float,无,1,支付给职工以及为职工支付的现金,现金流量表季度
+cashflow_quarterly,c_paid_for_taxes,tushare_cashflow,cashflow,c_paid_for_taxes,float,无,1,支付的各项税费,现金流量表季度
+cashflow_quarterly,n_incr_clt_loan_adv,tushare_cashflow,cashflow,n_incr_clt_loan_adv,float,无,1,客户贷款及垫款净增加额,现金流量表季度
+cashflow_quarterly,n_incr_dep_cbob,tushare_cashflow,cashflow,n_incr_dep_cbob,float,无,1,存放央行和同业款项净增加额,现金流量表季度
+cashflow_quarterly,c_pay_claims_orig_inco,tushare_cashflow,cashflow,c_pay_claims_orig_inco,float,无,1,支付原保险合同赔付款项的现金,现金流量表季度
+cashflow_quarterly,pay_handling_chrg,tushare_cashflow,cashflow,pay_handling_chrg,float,无,1,支付手续费的现金,现金流量表季度
+cashflow_quarterly,pay_comm_insur_plcy,tushare_cashflow,cashflow,pay_comm_insur_plcy,float,无,1,支付保单红利的现金,现金流量表季度
+cashflow_quarterly,oth_cash_pay_oper_act,tushare_cashflow,cashflow,oth_cash_pay_oper_act,float,无,1,支付其他与经营活动有关的现金,现金流量表季度
+cashflow_quarterly,st_cash_out_act,tushare_cashflow,cashflow,st_cash_out_act,float,无,1,经营活动现金流出小计,现金流量表季度
+cashflow_quarterly,n_cashflow_act,tushare_cashflow,cashflow,n_cashflow_act,float,无,1,经营活动产生的现金流量净额,现金流量表季度
+cashflow_quarterly,oth_recp_ral_inv_act,tushare_cashflow,cashflow,oth_recp_ral_inv_act,float,无,1,收到其他与投资活动有关的现金,现金流量表季度
+cashflow_quarterly,c_disp_withdrwl_invest,tushare_cashflow,cashflow,c_disp_withdrwl_invest,float,无,1,收回投资收到的现金,现金流量表季度
+cashflow_quarterly,c_recp_return_invest,tushare_cashflow,cashflow,c_recp_return_invest,float,无,1,取得投资收益收到的现金,现金流量表季度
+cashflow_quarterly,n_recp_disp_fiolta,tushare_cashflow,cashflow,n_recp_disp_fiolta,float,无,1,处置固定资产、无形资产和其他长期资产收回的现金净额,现金流量表季度
+cashflow_quarterly,n_recp_disp_sobu,tushare_cashflow,cashflow,n_recp_disp_sobu,float,无,1,处置子公司及其他营业单位收到的现金净额,现金流量表季度
+cashflow_quarterly,stot_inflows_inv_act,tushare_cashflow,cashflow,stot_inflows_inv_act,float,无,1,投资活动现金流入小计,现金流量表季度
+cashflow_quarterly,c_pay_acq_const_fiolta,tushare_cashflow,cashflow,c_pay_acq_const_fiolta,float,无,1,购建固定资产、无形资产和其他长期资产支付的现金,现金流量表季度
+cashflow_quarterly,c_paid_invest,tushare_cashflow,cashflow,c_paid_invest,float,无,1,投资支付的现金,现金流量表季度
+cashflow_quarterly,n_disp_subs_oth_biz,tushare_cashflow,cashflow,n_disp_subs_oth_biz,float,无,1,取得子公司及其他营业单位支付的现金净额,现金流量表季度
+cashflow_quarterly,oth_pay_ral_inv_act,tushare_cashflow,cashflow,oth_pay_ral_inv_act,float,无,1,支付其他与投资活动有关的现金,现金流量表季度
+cashflow_quarterly,n_incr_pledge_loan,tushare_cashflow,cashflow,n_incr_pledge_loan,float,无,1,质押贷款净增加额,现金流量表季度
+cashflow_quarterly,stot_out_inv_act,tushare_cashflow,cashflow,stot_out_inv_act,float,无,1,投资活动现金流出小计,现金流量表季度
+cashflow_quarterly,n_cashflow_inv_act,tushare_cashflow,cashflow,n_cashflow_inv_act,float,无,1,投资活动产生的现金流量净额,现金流量表季度
+cashflow_quarterly,c_recp_borrow,tushare_cashflow,cashflow,c_recp_borrow,float,无,1,取得借款收到的现金,现金流量表季度
+cashflow_quarterly,proc_issue_bonds,tushare_cashflow,cashflow,proc_issue_bonds,float,无,1,发行债券收到的现金,现金流量表季度
+cashflow_quarterly,oth_cash_recp_ral_fnc_act,tushare_cashflow,cashflow,oth_cash_recp_ral_fnc_act,float,无,1,收到其他与筹资活动有关的现金,现金流量表季度
+cashflow_quarterly,stot_cash_in_fnc_act,tushare_cashflow,cashflow,stot_cash_in_fnc_act,float,无,1,筹资活动现金流入小计,现金流量表季度
+cashflow_quarterly,free_cashflow,tushare_cashflow,cashflow,free_cashflow,float,无,1,企业自由现金流量,现金流量表季度
+cashflow_quarterly,c_prepay_amt_borr,tushare_cashflow,cashflow,c_prepay_amt_borr,float,无,1,偿还债务支付的现金,现金流量表季度
+cashflow_quarterly,c_pay_dist_dpcp_int_exp,tushare_cashflow,cashflow,c_pay_dist_dpcp_int_exp,float,无,1,分配股利、利润或偿付利息支付的现金,现金流量表季度
+cashflow_quarterly,incl_dvd_profit_paid_sc_ms,tushare_cashflow,cashflow,incl_dvd_profit_paid_sc_ms,float,无,1,其中:子公司支付给少数股东的股利、利润,现金流量表季度
+cashflow_quarterly,oth_cashpay_ral_fnc_act,tushare_cashflow,cashflow,oth_cashpay_ral_fnc_act,float,无,1,支付其他与筹资活动有关的现金,现金流量表季度
+cashflow_quarterly,stot_cashout_fnc_act,tushare_cashflow,cashflow,stot_cashout_fnc_act,float,无,1,筹资活动现金流出小计,现金流量表季度
+cashflow_quarterly,n_cash_flows_fnc_act,tushare_cashflow,cashflow,n_cash_flows_fnc_act,float,无,1,筹资活动产生的现金流量净额,现金流量表季度
+cashflow_quarterly,eff_fx_flu_cash,tushare_cashflow,cashflow,eff_fx_flu_cash,float,无,1,汇率变动对现金的影响,现金流量表季度
+cashflow_quarterly,n_incr_cash_cash_equ,tushare_cashflow,cashflow,n_incr_cash_cash_equ,float,无,1,现金及现金等价物净增加额,现金流量表季度
+cashflow_quarterly,c_cash_equ_beg_period,tushare_cashflow,cashflow,c_cash_equ_beg_period,float,无,1,期初现金及现金等价物余额,现金流量表季度
+cashflow_quarterly,c_cash_equ_end_period,tushare_cashflow,cashflow,c_cash_equ_end_period,float,无,1,期末现金及现金等价物余额,现金流量表季度
+cashflow_quarterly,c_recp_cap_contrib,tushare_cashflow,cashflow,c_recp_cap_contrib,float,无,1,吸收投资收到的现金,现金流量表季度
+cashflow_quarterly,incl_cash_rec_saims,tushare_cashflow,cashflow,incl_cash_rec_saims,float,无,1,其中:子公司吸收少数股东投资收到的现金,现金流量表季度
+cashflow_quarterly,uncon_invest_loss,tushare_cashflow,cashflow,uncon_invest_loss,float,无,1,未确认投资损失,现金流量表季度
+cashflow_quarterly,prov_depr_assets,tushare_cashflow,cashflow,prov_depr_assets,float,无,1,加:资产减值准备,现金流量表季度
+cashflow_quarterly,depr_fa_coga_dpba,tushare_cashflow,cashflow,depr_fa_coga_dpba,float,无,1,固定资产折旧、油气资产折耗、生产性生物资产折旧,现金流量表季度
+cashflow_quarterly,amort_intang_assets,tushare_cashflow,cashflow,amort_intang_assets,float,无,1,无形资产摊销,现金流量表季度
+cashflow_quarterly,lt_amort_deferred_exp,tushare_cashflow,cashflow,lt_amort_deferred_exp,float,无,1,长期待摊费用摊销,现金流量表季度
+cashflow_quarterly,decr_deferred_exp,tushare_cashflow,cashflow,decr_deferred_exp,float,无,1,待摊费用减少,现金流量表季度
+cashflow_quarterly,incr_acc_exp,tushare_cashflow,cashflow,incr_acc_exp,float,无,1,预提费用增加,现金流量表季度
+cashflow_quarterly,loss_disp_fiolta,tushare_cashflow,cashflow,loss_disp_fiolta,float,无,1,处置固定、无形资产和其他长期资产的损失,现金流量表季度
+cashflow_quarterly,loss_scr_fa,tushare_cashflow,cashflow,loss_scr_fa,float,无,1,固定资产报废损失,现金流量表季度
+cashflow_quarterly,loss_fv_chg,tushare_cashflow,cashflow,loss_fv_chg,float,无,1,公允价值变动损失,现金流量表季度
+cashflow_quarterly,invest_loss,tushare_cashflow,cashflow,invest_loss,float,无,1,投资损失,现金流量表季度
+cashflow_quarterly,decr_def_inc_tax_assets,tushare_cashflow,cashflow,decr_def_inc_tax_assets,float,无,1,递延所得税资产减少,现金流量表季度
+cashflow_quarterly,incr_def_inc_tax_liab,tushare_cashflow,cashflow,incr_def_inc_tax_liab,float,无,1,递延所得税负债增加,现金流量表季度
+cashflow_quarterly,decr_inventories,tushare_cashflow,cashflow,decr_inventories,float,无,1,存货的减少,现金流量表季度
+cashflow_quarterly,decr_oper_payable,tushare_cashflow,cashflow,decr_oper_payable,float,无,1,经营性应收项目的减少,现金流量表季度
+cashflow_quarterly,incr_oper_payable,tushare_cashflow,cashflow,incr_oper_payable,float,无,1,经营性应付项目的增加,现金流量表季度
+cashflow_quarterly,others,tushare_cashflow,cashflow,others,float,无,1,其他,现金流量表季度
+cashflow_quarterly,im_net_cashflow_oper_act,tushare_cashflow,cashflow,im_net_cashflow_oper_act,float,无,1,经营活动产生的现金流量净额(间接法),现金流量表季度
+cashflow_quarterly,conv_debt_into_cap,tushare_cashflow,cashflow,conv_debt_into_cap,float,无,1,债务转为资本,现金流量表季度
+cashflow_quarterly,conv_copbonds_due_within_1y,tushare_cashflow,cashflow,conv_copbonds_due_within_1y,float,无,1,一年内到期的可转换公司债券,现金流量表季度
+cashflow_quarterly,fa_fnc_leases,tushare_cashflow,cashflow,fa_fnc_leases,float,无,1,融资租入固定资产,现金流量表季度
+cashflow_quarterly,im_n_incr_cash_equ,tushare_cashflow,cashflow,im_n_incr_cash_equ,float,无,1,现金及现金等价物净增加额(间接法),现金流量表季度
+cashflow_quarterly,net_dism_capital_add,tushare_cashflow,cashflow,net_dism_capital_add,float,无,1,拆出资金净增加额,现金流量表季度
+cashflow_quarterly,net_cash_rece_sec,tushare_cashflow,cashflow,net_cash_rece_sec,float,元,1,代理买卖证券收到的现金净额(元),现金流量表季度
+cashflow_quarterly,credit_impa_loss,tushare_cashflow,cashflow,credit_impa_loss,float,无,1,信用减值损失,现金流量表季度
+cashflow_quarterly,use_right_asset_dep,tushare_cashflow,cashflow,use_right_asset_dep,float,无,1,使用权资产折旧,现金流量表季度
+cashflow_quarterly,oth_loss_asset,tushare_cashflow,cashflow,oth_loss_asset,float,无,1,其他资产减值损失,现金流量表季度
+cashflow_quarterly,end_bal_cash,tushare_cashflow,cashflow,end_bal_cash,float,无,1,现金的期末余额,现金流量表季度
+cashflow_quarterly,beg_bal_cash,tushare_cashflow,cashflow,beg_bal_cash,float,无,1,减:现金的期初余额,现金流量表季度
+cashflow_quarterly,end_bal_cash_equ,tushare_cashflow,cashflow,end_bal_cash_equ,float,无,1,加:现金等价物的期末余额,现金流量表季度
+cashflow_quarterly,beg_bal_cash_equ,tushare_cashflow,cashflow,beg_bal_cash_equ,float,无,1,减:现金等价物的期初余额,现金流量表季度
+cashflow_quarterly,update_flag,tushare_cashflow,cashflow,update_flag,str,无,1,更新标志(1最新）,现金流量表季度
+market_daily_info,exchange,tushare_daily_info,daily_info,exchange,str,无,1.0,交易所,市场日度信息
+market_daily_info,symbol,tushare_daily_info,daily_info,symbol,str,无,1.0,交易对,市场日度信息
+market_daily_info,is_contract,tushare_daily_info,daily_info,is_contract,str,无,1.0,是否合约,市场日度信息
+market_daily_info,status,tushare_daily_info,daily_info,status,str,无,1.0,状态Y可用N不可用,市场日度信息
+moneyflow_stock,ts_code,tushare_moneyflow_stock,moneyflow,ts_code,str,无,1.0,TS代码,个股资金流向
+moneyflow_stock,trade_date,tushare_moneyflow_stock,moneyflow,trade_date,str,无,1.0,交易日期,个股资金流向
+moneyflow_stock,buy_sm_vol,tushare_moneyflow_stock,moneyflow,buy_sm_vol,int,手,1.0,小单买入量（手）,个股资金流向
+moneyflow_stock,buy_sm_amount,tushare_moneyflow_stock,moneyflow,buy_sm_amount,float,元,1.0,小单买入金额（万元）,个股资金流向
+moneyflow_stock,sell_sm_vol,tushare_moneyflow_stock,moneyflow,sell_sm_vol,int,手,1.0,小单卖出量（手）,个股资金流向
+moneyflow_stock,sell_sm_amount,tushare_moneyflow_stock,moneyflow,sell_sm_amount,float,元,1.0,小单卖出金额（万元）,个股资金流向
+moneyflow_stock,buy_md_vol,tushare_moneyflow_stock,moneyflow,buy_md_vol,int,手,1.0,中单买入量（手）,个股资金流向
+moneyflow_stock,buy_md_amount,tushare_moneyflow_stock,moneyflow,buy_md_amount,float,元,1.0,中单买入金额（万元）,个股资金流向
+moneyflow_stock,sell_md_vol,tushare_moneyflow_stock,moneyflow,sell_md_vol,int,手,1.0,中单卖出量（手）,个股资金流向
+moneyflow_stock,sell_md_amount,tushare_moneyflow_stock,moneyflow,sell_md_amount,float,元,1.0,中单卖出金额（万元）,个股资金流向
+moneyflow_stock,buy_lg_vol,tushare_moneyflow_stock,moneyflow,buy_lg_vol,int,手,1.0,大单买入量（手）,个股资金流向
+moneyflow_stock,buy_lg_amount,tushare_moneyflow_stock,moneyflow,buy_lg_amount,float,元,1.0,大单买入金额（万元）,个股资金流向
+moneyflow_stock,sell_lg_vol,tushare_moneyflow_stock,moneyflow,sell_lg_vol,int,手,1.0,大单卖出量（手）,个股资金流向
+moneyflow_stock,sell_lg_amount,tushare_moneyflow_stock,moneyflow,sell_lg_amount,float,元,1.0,大单卖出金额（万元）,个股资金流向
+moneyflow_stock,buy_elg_vol,tushare_moneyflow_stock,moneyflow,buy_elg_vol,int,手,1.0,特大单买入量（手）,个股资金流向
+moneyflow_stock,buy_elg_amount,tushare_moneyflow_stock,moneyflow,buy_elg_amount,float,元,1.0,特大单买入金额（万元）,个股资金流向
+moneyflow_stock,sell_elg_vol,tushare_moneyflow_stock,moneyflow,sell_elg_vol,int,手,1.0,特大单卖出量（手）,个股资金流向
+moneyflow_stock,sell_elg_amount,tushare_moneyflow_stock,moneyflow,sell_elg_amount,float,元,1.0,特大单卖出金额（万元）,个股资金流向
+moneyflow_stock,net_mf_vol,tushare_moneyflow_stock,moneyflow,net_mf_vol,int,手,1.0,净流入量（手）,个股资金流向
+moneyflow_stock,net_mf_amount,tushare_moneyflow_stock,moneyflow,net_mf_amount,float,元,1.0,净流入额（万元）,个股资金流向
+kline_daily,trade_date,tdx_kline_api,kline-history,trade_date,str,无,1.0,TDX 本地 API kline-history 字段 trade_date,TDX 历史K线（经 DataSourceManager 标准化后）
+kline_daily,ts_code,tdx_kline_api,kline-history,ts_code,str,无,1.0,TDX 本地 API kline-history 字段 ts_code,TDX 历史K线（经 DataSourceManager 标准化后）
+kline_daily,open,tdx_kline_api,kline-history,open,float,无,1.0,TDX 本地 API kline-history 字段 open,TDX 历史K线（经 DataSourceManager 标准化后）
+kline_daily,high,tdx_kline_api,kline-history,high,float,无,1.0,TDX 本地 API kline-history 字段 high,TDX 历史K线（经 DataSourceManager 标准化后）
+kline_daily,low,tdx_kline_api,kline-history,low,float,无,1.0,TDX 本地 API kline-history 字段 low,TDX 历史K线（经 DataSourceManager 标准化后）
+kline_daily,close,tdx_kline_api,kline-history,close,float,厘,1.0,TDX 本地 API kline-history 字段 close（价格单位：厘）,TDX 历史K线（经 DataSourceManager 标准化后）
+kline_daily,vol,tdx_kline_api,kline-history,vol,float,手,1.0,TDX 本地 API kline-history 字段 vol（成交量单位：手）,TDX 历史K线（经 DataSourceManager 标准化后）
+kline_daily,amount,tdx_kline_api,kline-history,amount,float,厘,1.0,TDX 本地 API kline-history 字段 amount（成交额单位：厘）,TDX 历史K线（经 DataSourceManager 标准化后）
+kline_daily_raw,trade_date,db_aistock,market.kline_daily_raw,trade_date,str,无,1.0,market.kline_daily_raw 字段 trade_date,原始日线（厘/手）
+kline_daily_raw,ts_code,db_aistock,market.kline_daily_raw,ts_code,str,无,1.0,market.kline_daily_raw 字段 ts_code,原始日线（厘/手）
+kline_daily_raw,open_li,db_aistock,market.kline_daily_raw,open_li,float,厘,1.0,market.kline_daily_raw 字段 open_li（价格单位：厘）,原始日线（厘/手）
+kline_daily_raw,high_li,db_aistock,market.kline_daily_raw,high_li,float,厘,1.0,market.kline_daily_raw 字段 high_li（价格单位：厘）,原始日线（厘/手）
+kline_daily_raw,low_li,db_aistock,market.kline_daily_raw,low_li,float,厘,1.0,market.kline_daily_raw 字段 low_li（价格单位：厘）,原始日线（厘/手）
+kline_daily_raw,close_li,db_aistock,market.kline_daily_raw,close_li,float,厘,1.0,market.kline_daily_raw 字段 close_li（价格单位：厘）,原始日线（厘/手）
+kline_daily_raw,volume_hand,db_aistock,market.kline_daily_raw,volume_hand,float,手,1.0,market.kline_daily_raw 字段 volume_hand（成交量单位：手）,原始日线（厘/手）
+kline_daily_raw,amount_li,db_aistock,market.kline_daily_raw,amount_li,float,厘,1.0,market.kline_daily_raw 字段 amount_li（成交额单位：厘）,原始日线（厘/手）
+kline_daily_raw,source,db_aistock,market.kline_daily_raw,source,str,无,1.0,market.kline_daily_raw 字段 source,原始日线（厘/手）
+kline_daily_qfq,trade_date,db_aistock,market.kline_daily_qfq,trade_date,str,无,1.0,market.kline_daily_qfq 字段 trade_date,前复权日线（厘/手）
+kline_daily_qfq,ts_code,db_aistock,market.kline_daily_qfq,ts_code,str,无,1.0,market.kline_daily_qfq 字段 ts_code,前复权日线（厘/手）
+kline_daily_qfq,open_li,db_aistock,market.kline_daily_qfq,open_li,float,厘,1.0,market.kline_daily_qfq 字段 open_li（价格单位：厘）,前复权日线（厘/手）
+kline_daily_qfq,high_li,db_aistock,market.kline_daily_qfq,high_li,float,厘,1.0,market.kline_daily_qfq 字段 high_li（价格单位：厘）,前复权日线（厘/手）
+kline_daily_qfq,low_li,db_aistock,market.kline_daily_qfq,low_li,float,厘,1.0,market.kline_daily_qfq 字段 low_li（价格单位：厘）,前复权日线（厘/手）
+kline_daily_qfq,close_li,db_aistock,market.kline_daily_qfq,close_li,float,厘,1.0,market.kline_daily_qfq 字段 close_li（价格单位：厘）,前复权日线（厘/手）
+kline_daily_qfq,volume_hand,db_aistock,market.kline_daily_qfq,volume_hand,float,手,1.0,market.kline_daily_qfq 字段 volume_hand（成交量单位：手）,前复权日线（厘/手）
+kline_daily_qfq,amount_li,db_aistock,market.kline_daily_qfq,amount_li,float,厘,1.0,market.kline_daily_qfq 字段 amount_li（成交额单位：厘）,前复权日线（厘/手）
+kline_daily_qfq,source,db_aistock,market.kline_daily_qfq,source,str,无,1.0,market.kline_daily_qfq 字段 source,前复权日线（厘/手）
+kline_daily_hfq,trade_date,db_aistock,market.kline_daily_hfq,trade_date,str,无,1.0,market.kline_daily_hfq 字段 trade_date,后复权日线（厘/手）
+kline_daily_hfq,ts_code,db_aistock,market.kline_daily_hfq,ts_code,str,无,1.0,market.kline_daily_hfq 字段 ts_code,后复权日线（厘/手）
+kline_daily_hfq,open_li,db_aistock,market.kline_daily_hfq,open_li,float,厘,1.0,market.kline_daily_hfq 字段 open_li（价格单位：厘）,后复权日线（厘/手）
+kline_daily_hfq,high_li,db_aistock,market.kline_daily_hfq,high_li,float,厘,1.0,market.kline_daily_hfq 字段 high_li（价格单位：厘）,后复权日线（厘/手）
+kline_daily_hfq,low_li,db_aistock,market.kline_daily_hfq,low_li,float,厘,1.0,market.kline_daily_hfq 字段 low_li（价格单位：厘）,后复权日线（厘/手）
+kline_daily_hfq,close_li,db_aistock,market.kline_daily_hfq,close_li,float,厘,1.0,market.kline_daily_hfq 字段 close_li（价格单位：厘）,后复权日线（厘/手）
+kline_daily_hfq,volume_hand,db_aistock,market.kline_daily_hfq,volume_hand,float,手,1.0,market.kline_daily_hfq 字段 volume_hand（成交量单位：手）,后复权日线（厘/手）
+kline_daily_hfq,amount_li,db_aistock,market.kline_daily_hfq,amount_li,float,厘,1.0,market.kline_daily_hfq 字段 amount_li（成交额单位：厘）,后复权日线（厘/手）
+kline_daily_hfq,source,db_aistock,market.kline_daily_hfq,source,str,无,1.0,market.kline_daily_hfq 字段 source,后复权日线（厘/手）
+etf_basic,ts_code,tushare_etf_basic,etf_basic,ts_code,str,无,1.0,基金交易代码,ETF 基础信息
+etf_basic,csname,tushare_etf_basic,etf_basic,csname,str,无,1.0,ETF中文简称,ETF 基础信息
+etf_basic,extname,tushare_etf_basic,etf_basic,extname,str,无,1.0,ETF扩位简称(对应交易所简称),ETF 基础信息
+etf_basic,cname,tushare_etf_basic,etf_basic,cname,str,无,1.0,基金中文全称,ETF 基础信息
+etf_basic,index_code,tushare_etf_basic,etf_basic,index_code,str,无,1.0,ETF基准指数代码,ETF 基础信息
+etf_basic,index_name,tushare_etf_basic,etf_basic,index_name,str,无,1.0,ETF基准指数中文全称,ETF 基础信息
+etf_basic,setup_date,tushare_etf_basic,etf_basic,setup_date,str,无,1.0,设立日期（格式：YYYYMMDD）,ETF 基础信息
+etf_basic,list_date,tushare_etf_basic,etf_basic,list_date,str,无,1.0,上市日期（格式：YYYYMMDD）,ETF 基础信息
+etf_basic,list_status,tushare_etf_basic,etf_basic,list_status,str,无,1.0,存续状态（L上市 D退市 P待上市）,ETF 基础信息
+etf_basic,exchange,tushare_etf_basic,etf_basic,exchange,str,无,1.0,交易所（上交所SH 深交所SZ）,ETF 基础信息
+etf_basic,mgr_name,tushare_etf_basic,etf_basic,mgr_name,str,无,1.0,基金管理人简称,ETF 基础信息
+etf_basic,custod_name,tushare_etf_basic,etf_basic,custod_name,str,无,1.0,基金托管人名称,ETF 基础信息
+etf_basic,mgt_fee,tushare_etf_basic,etf_basic,mgt_fee,float,无,1.0,基金管理人收取的费用,ETF 基础信息
+etf_basic,etf_type,tushare_etf_basic,etf_basic,etf_type,str,无,1.0,基金投资通道类型（境内、QDII）,ETF 基础信息
+moneyflow_stock_akshare,日期,akshare_stock_individual_fund_flow,stock_individual_fund_flow,日期,str,无,1.0,交易日期,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,收盘价,akshare_stock_individual_fund_flow,stock_individual_fund_flow,收盘价,float,元,1.0,当日收盘价,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,涨跌幅,akshare_stock_individual_fund_flow,stock_individual_fund_flow,涨跌幅,float,%,1.0,当日相对前一交易日涨跌幅,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,主力净流入-净额,akshare_stock_individual_fund_flow,stock_individual_fund_flow,主力净流入-净额,float,元,1.0,大单+超大单合计净流入金额,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,主力净流入-净占比,akshare_stock_individual_fund_flow,stock_individual_fund_flow,主力净流入-净占比,float,%,1.0,主力净流入金额占成交额比例,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,超大单净流入-净额,akshare_stock_individual_fund_flow,stock_individual_fund_flow,超大单净流入-净额,float,元,1.0,超大单净流入金额,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,超大单净流入-净占比,akshare_stock_individual_fund_flow,stock_individual_fund_flow,超大单净流入-净占比,float,%,1.0,超大单净流入金额占成交额比例,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,大单净流入-净额,akshare_stock_individual_fund_flow,stock_individual_fund_flow,大单净流入-净额,float,元,1.0,大单净流入金额,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,大单净流入-净占比,akshare_stock_individual_fund_flow,stock_individual_fund_flow,大单净流入-净占比,float,%,1.0,大单净流入金额占成交额比例,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,中单净流入-净额,akshare_stock_individual_fund_flow,stock_individual_fund_flow,中单净流入-净额,float,元,1.0,中单净流入金额,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,中单净流入-净占比,akshare_stock_individual_fund_flow,stock_individual_fund_flow,中单净流入-净占比,float,%,1.0,中单净流入金额占成交额比例,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,小单净流入-净额,akshare_stock_individual_fund_flow,stock_individual_fund_flow,小单净流入-净额,float,元,1.0,小单净流入金额,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+moneyflow_stock_akshare,小单净流入-净占比,akshare_stock_individual_fund_flow,stock_individual_fund_flow,小单净流入-净占比,float,%,1.0,小单净流入金额占成交额比例,Akshare 个股资金流向（与 moneyflow_stock 语义对应）
+margin_trading_summary,trade_date,tushare_margin,margin,trade_date,str,无,1.0,交易日期,融资融券汇总（Tushare margin）
+margin_trading_summary,exchange_id,tushare_margin,margin,exchange_id,str,无,1.0,交易所代码（SSE上交所SZSE深交所BSE北交所）,融资融券汇总（Tushare margin）
+margin_trading_summary,rzye,tushare_margin,margin,rzye,float,元,1.0,融资余额(元),融资融券汇总（Tushare margin）
+margin_trading_summary,rzmre,tushare_margin,margin,rzmre,float,元,1.0,融资买入额(元),融资融券汇总（Tushare margin）
+margin_trading_summary,rzche,tushare_margin,margin,rzche,float,元,1.0,融资偿还额(元),融资融券汇总（Tushare margin）
+margin_trading_summary,rqye,tushare_margin,margin,rqye,float,元,1.0,融券余额(元),融资融券汇总（Tushare margin）
+margin_trading_summary,rqmcl,tushare_margin,margin,rqmcl,float,手,1.0,"融券卖出量(股,份,手)",融资融券汇总（Tushare margin）
+margin_trading_summary,rzrqye,tushare_margin,margin,rzrqye,float,元,1.0,融资融券余额(元),融资融券汇总（Tushare margin）
+margin_trading_summary,rqyl,tushare_margin,margin,rqyl,float,手,1.0,"融券余量(股,份,手)",融资融券汇总（Tushare margin）
+margin_trading_detail,trade_date,tushare_margin_detail,margin_detail,trade_date,str,无,1.0,交易日期,融资融券明细（Tushare margin_detail）
+margin_trading_detail,ts_code,tushare_margin_detail,margin_detail,ts_code,str,无,1.0,TS股票代码,融资融券明细（Tushare margin_detail）
+margin_trading_detail,name,tushare_margin_detail,margin_detail,name,str,无,1.0,股票名称 （20190910后有数据）,融资融券明细（Tushare margin_detail）
+margin_trading_detail,rzye,tushare_margin_detail,margin_detail,rzye,float,元,1.0,融资余额(元),融资融券明细（Tushare margin_detail）
+margin_trading_detail,rqye,tushare_margin_detail,margin_detail,rqye,float,元,1.0,融券余额(元),融资融券明细（Tushare margin_detail）
+margin_trading_detail,rzmre,tushare_margin_detail,margin_detail,rzmre,float,元,1.0,融资买入额(元),融资融券明细（Tushare margin_detail）
+margin_trading_detail,rqyl,tushare_margin_detail,margin_detail,rqyl,float,无,1.0,融券余量（股）,融资融券明细（Tushare margin_detail）
+margin_trading_detail,rzche,tushare_margin_detail,margin_detail,rzche,float,元,1.0,融资偿还额(元),融资融券明细（Tushare margin_detail）
+margin_trading_detail,rqchl,tushare_margin_detail,margin_detail,rqchl,float,无,1.0,融券偿还量(股),融资融券明细（Tushare margin_detail）
+margin_trading_detail,rqmcl,tushare_margin_detail,margin_detail,rqmcl,float,手,1.0,"融券卖出量(股,份,手)",融资融券明细（Tushare margin_detail）
+margin_trading_detail,rzrqye,tushare_margin_detail,margin_detail,rzrqye,float,元,1.0,融资融券余额(元),融资融券明细（Tushare margin_detail）
+stock_52week_range,symbol,internal_unified_data,get_52week_high_low,symbol,str,无,1.0,股票代码（6位或带后缀）,UnifiedDataAccess 计算的52周高低位结果
+stock_52week_range,high_52w,internal_unified_data,get_52week_high_low,high_52w,float,元,1.0,过去52周内的最高价,UnifiedDataAccess 计算的52周高低位结果
+stock_52week_range,low_52w,internal_unified_data,get_52week_high_low,low_52w,float,元,1.0,过去52周内的最低价,UnifiedDataAccess 计算的52周高低位结果
+stock_52week_range,high_date,internal_unified_data,get_52week_high_low,high_date,str,无,1.0,52周最高价对应的交易日期,UnifiedDataAccess 计算的52周高低位结果
+stock_52week_range,low_date,internal_unified_data,get_52week_high_low,low_date,str,无,1.0,52周最低价对应的交易日期,UnifiedDataAccess 计算的52周高低位结果
+stock_52week_range,current_price,internal_unified_data,get_52week_high_low,current_price,float,元,1.0,最近一个交易日的收盘价,UnifiedDataAccess 计算的52周高低位结果
+stock_52week_range,position_percent,internal_unified_data,get_52week_high_low,position_percent,float,%,1.0,当前价格在52周高低位区间中的百分位位置,UnifiedDataAccess 计算的52周高低位结果
+stock_52week_range,success,internal_unified_data,get_52week_high_low,success,bool,无,1.0,是否成功获取到52周高低位数据,UnifiedDataAccess 计算的52周高低位结果
+kline_minute_raw,trade_time,db_aistock,market.kline_minute_raw,trade_time,str,无,1.0,market.kline_minute_raw 字段 trade_time,分钟线原始数据（厘/手）
+kline_minute_raw,ts_code,db_aistock,market.kline_minute_raw,ts_code,str,无,1.0,market.kline_minute_raw 字段 ts_code,分钟线原始数据（厘/手）
+kline_minute_raw,freq,db_aistock,market.kline_minute_raw,freq,str,无,1.0,market.kline_minute_raw 字段 freq，固定为 1m,分钟线原始数据（厘/手）
+kline_minute_raw,open_li,db_aistock,market.kline_minute_raw,open_li,float,厘,1.0,market.kline_minute_raw 字段 open_li（价格单位：厘）,分钟线原始数据（厘/手）
+kline_minute_raw,high_li,db_aistock,market.kline_minute_raw,high_li,float,厘,1.0,market.kline_minute_raw 字段 high_li（价格单位：厘）,分钟线原始数据（厘/手）
+kline_minute_raw,low_li,db_aistock,market.kline_minute_raw,low_li,float,厘,1.0,market.kline_minute_raw 字段 low_li（价格单位：厘）,分钟线原始数据（厘/手）
+kline_minute_raw,close_li,db_aistock,market.kline_minute_raw,close_li,float,厘,1.0,market.kline_minute_raw 字段 close_li（价格单位：厘）,分钟线原始数据（厘/手）
+kline_minute_raw,volume_hand,db_aistock,market.kline_minute_raw,volume_hand,float,手,1.0,market.kline_minute_raw 字段 volume_hand（成交量单位：手）,分钟线原始数据（厘/手）
+kline_minute_raw,amount_li,db_aistock,market.kline_minute_raw,amount_li,float,厘,1.0,market.kline_minute_raw 字段 amount_li（成交额单位：厘）,分钟线原始数据（厘/手）
+kline_minute_raw,adjust_type,db_aistock,market.kline_minute_raw,adjust_type,str,无,1.0,market.kline_minute_raw 字段 adjust_type，固定为 none,分钟线原始数据（厘/手）
+kline_minute_raw,source,db_aistock,market.kline_minute_raw,source,str,无,1.0,market.kline_minute_raw 字段 source（tdx_api / tdx_vipdoc）,分钟线原始数据（厘/手）
+tick_trade_raw,trade_time,db_aistock,market.tick_trade_raw,trade_time,str,无,1.0,market.tick_trade_raw 字段 trade_time,逐笔成交原始数据（厘/手）
+tick_trade_raw,ts_code,db_aistock,market.tick_trade_raw,ts_code,str,无,1.0,market.tick_trade_raw 字段 ts_code,逐笔成交原始数据（厘/手）
+tick_trade_raw,price_li,db_aistock,market.tick_trade_raw,price_li,float,厘,1.0,market.tick_trade_raw 字段 price_li（成交价单位：厘）,逐笔成交原始数据（厘/手）
+tick_trade_raw,volume_hand,db_aistock,market.tick_trade_raw,volume_hand,float,手,1.0,market.tick_trade_raw 字段 volume_hand（成交量单位：手）,逐笔成交原始数据（厘/手）
+tick_trade_raw,status,db_aistock,market.tick_trade_raw,status,int,无,1.0,market.tick_trade_raw 字段 status（0 买入 1 卖出 2 中性）,逐笔成交原始数据（厘/手）
+tick_trade_raw,source,db_aistock,market.tick_trade_raw,source,str,无,1.0,market.tick_trade_raw 字段 source，固定为 tdx_api,逐笔成交原始数据（厘/手）
+quote_snapshot,snapshot_time,db_aistock,market.quote_snapshot,snapshot_time,str,无,1.0,market.quote_snapshot 字段 snapshot_time,行情快照（厘/手）
+quote_snapshot,ts_code,db_aistock,market.quote_snapshot,ts_code,str,无,1.0,market.quote_snapshot 字段 ts_code,行情快照（厘/手）
+quote_snapshot,last_li,db_aistock,market.quote_snapshot,last_li,float,厘,1.0,market.quote_snapshot 字段 last_li（最新价单位：厘）,行情快照（厘/手）
+quote_snapshot,open_li,db_aistock,market.quote_snapshot,open_li,float,厘,1.0,market.quote_snapshot 字段 open_li（开盘价单位：厘）,行情快照（厘/手）
+quote_snapshot,high_li,db_aistock,market.quote_snapshot,high_li,float,厘,1.0,market.quote_snapshot 字段 high_li（最高价单位：厘）,行情快照（厘/手）
+quote_snapshot,low_li,db_aistock,market.quote_snapshot,low_li,float,厘,1.0,market.quote_snapshot 字段 low_li（最低价单位：厘）,行情快照（厘/手）
+quote_snapshot,close_li,db_aistock,market.quote_snapshot,close_li,float,厘,1.0,market.quote_snapshot 字段 close_li（收盘价单位：厘）,行情快照（厘/手）
+quote_snapshot,total_hand,db_aistock,market.quote_snapshot,total_hand,float,手,1.0,market.quote_snapshot 字段 total_hand（总成交量单位：手）,行情快照（厘/手）
+quote_snapshot,amount_li,db_aistock,market.quote_snapshot,amount_li,float,厘,1.0,market.quote_snapshot 字段 amount_li（成交额单位：厘）,行情快照（厘/手）
+quote_snapshot,inside_dish,db_aistock,market.quote_snapshot,inside_dish,float,手,1.0,market.quote_snapshot 字段 inside_dish（内盘单位：手）,行情快照（厘/手）
+quote_snapshot,outer_disc,db_aistock,market.quote_snapshot,outer_disc,float,手,1.0,market.quote_snapshot 字段 outer_disc（外盘单位：手）,行情快照（厘/手）
+quote_snapshot,intuition,db_aistock,market.quote_snapshot,intuition,float,手,1.0,market.quote_snapshot 字段 intuition（现量单位：手）,行情快照（厘/手）
+quote_snapshot,server_time_ts,db_aistock,market.quote_snapshot,server_time_ts,str,无,1.0,market.quote_snapshot 字段 server_time_ts,行情快照（厘/手）
+quote_snapshot,buy_levels,db_aistock,market.quote_snapshot,buy_levels,json,无,1.0,market.quote_snapshot 字段 buy_levels JSON,行情快照（厘/手）
+quote_snapshot,sell_levels,db_aistock,market.quote_snapshot,sell_levels,json,无,1.0,market.quote_snapshot 字段 sell_levels JSON,行情快照（厘/手）
+sina_board_intraday,ts,db_aistock,market.sina_board_intraday,ts,str,无,1.0,market.sina_board_intraday 字段 ts（快照时间 TIMESTAMPTZ）,新浪板块资金分时
+sina_board_intraday,cate_type,db_aistock,market.sina_board_intraday,cate_type,int,无,1.0,market.sina_board_intraday 字段 cate_type（板块分类类型 0/1/2）,新浪板块资金分时
+sina_board_intraday,board_code,db_aistock,market.sina_board_intraday,board_code,str,无,1.0,market.sina_board_intraday 字段 board_code（板块代码，如 gn_ldc）,新浪板块资金分时
+sina_board_intraday,board_name,db_aistock,market.sina_board_intraday,board_name,str,无,1.0,market.sina_board_intraday 字段 board_name（板块名称）,新浪板块资金分时
+sina_board_intraday,pct_chg,db_aistock,market.sina_board_intraday,pct_chg,float,%,1.0,market.sina_board_intraday 字段 pct_chg（板块平均涨跌幅，单位：%）,新浪板块资金分时
+sina_board_intraday,amount,db_aistock,market.sina_board_intraday,amount,float,元,1.0,market.sina_board_intraday 字段 amount（成交额，单位：元）,新浪板块资金分时
+sina_board_intraday,net_inflow,db_aistock,market.sina_board_intraday,net_inflow,float,元,1.0,market.sina_board_intraday 字段 net_inflow（资金净流入，单位：元）,新浪板块资金分时
+sina_board_intraday,turnover,db_aistock,market.sina_board_intraday,turnover,float,无,1.0,market.sina_board_intraday 字段 turnover（换手率，原始为小数）,新浪板块资金分时
+sina_board_intraday,ratioamount,db_aistock,market.sina_board_intraday,ratioamount,float,%,1.0,market.sina_board_intraday 字段 ratioamount（净流入率，单位：%）,新浪板块资金分时
+sina_board_intraday,meta,db_aistock,market.sina_board_intraday,meta,json,无,1.0,market.sina_board_intraday 字段 meta（原始新浪 JSON 明细）,新浪板块资金分时
+sina_board_daily,trade_date,db_aistock,market.sina_board_daily,trade_date,str,无,1.0,market.sina_board_daily 字段 trade_date（交易日 YYYY-MM-DD）,新浪板块资金日统计
+sina_board_daily,cate_type,db_aistock,market.sina_board_daily,cate_type,int,无,1.0,market.sina_board_daily 字段 cate_type（板块分类类型 0/1/2）,新浪板块资金日统计
+sina_board_daily,board_code,db_aistock,market.sina_board_daily,board_code,str,无,1.0,market.sina_board_daily 字段 board_code（板块代码，如 gn_ldc）,新浪板块资金日统计
+sina_board_daily,board_name,db_aistock,market.sina_board_daily,board_name,str,无,1.0,market.sina_board_daily 字段 board_name（板块名称）,新浪板块资金日统计
+sina_board_daily,pct_chg,db_aistock,market.sina_board_daily,pct_chg,float,%,1.0,market.sina_board_daily 字段 pct_chg（当日平均涨跌幅，单位：%）,新浪板块资金日统计
+sina_board_daily,amount,db_aistock,market.sina_board_daily,amount,float,元,1.0,market.sina_board_daily 字段 amount（当日成交额，单位：元）,新浪板块资金日统计
+sina_board_daily,net_inflow,db_aistock,market.sina_board_daily,net_inflow,float,元,1.0,market.sina_board_daily 字段 net_inflow（当日资金净流入，单位：元）,新浪板块资金日统计
+sina_board_daily,turnover,db_aistock,market.sina_board_daily,turnover,float,无,1.0,market.sina_board_daily 字段 turnover（当日换手率，原始为小数）,新浪板块资金日统计
+sina_board_daily,ratioamount,db_aistock,market.sina_board_daily,ratioamount,float,%,1.0,market.sina_board_daily 字段 ratioamount（当日净流入率，单位：%）,新浪板块资金日统计
+sina_board_daily,meta,db_aistock,market.sina_board_daily,meta,json,无,1.0,market.sina_board_daily 字段 meta（原始新浪 JSON 明细）,新浪板块资金日统计
+
+index_kline_daily_qfq,trade_date,db_aistock,market.index_kline_daily_qfq,trade_date,str,无,1.0,market.index_kline_daily_qfq 字段 trade_date（交易日 YYYY-MM-DD）,指数前复权日K（厘/手）
+index_kline_daily_qfq,code,db_aistock,market.index_kline_daily_qfq,code,str,无,1.0,market.index_kline_daily_qfq 字段 code（指数代码，如 399001.SZ）,指数前复权日K（厘/手）
+index_kline_daily_qfq,open_li,db_aistock,market.index_kline_daily_qfq,open_li,float,厘,1.0,market.index_kline_daily_qfq 字段 open_li（开盘价，单位：厘）,指数前复权日K（厘/手）
+index_kline_daily_qfq,high_li,db_aistock,market.index_kline_daily_qfq,high_li,float,厘,1.0,market.index_kline_daily_qfq 字段 high_li（最高价，单位：厘）,指数前复权日K（厘/手）
+index_kline_daily_qfq,low_li,db_aistock,market.index_kline_daily_qfq,low_li,float,厘,1.0,market.index_kline_daily_qfq 字段 low_li（最低价，单位：厘）,指数前复权日K（厘/手）
+index_kline_daily_qfq,close_li,db_aistock,market.index_kline_daily_qfq,close_li,float,厘,1.0,market.index_kline_daily_qfq 字段 close_li（收盘价，单位：厘）,指数前复权日K（厘/手）
+index_kline_daily_qfq,volume_hand,db_aistock,market.index_kline_daily_qfq,volume_hand,float,手,1.0,market.index_kline_daily_qfq 字段 volume_hand（成交量，单位：手）,指数前复权日K（厘/手）
+index_kline_daily_qfq,amount_li,db_aistock,market.index_kline_daily_qfq,amount_li,float,厘,1.0,market.index_kline_daily_qfq 字段 amount_li（成交额，单位：厘）,指数前复权日K（厘/手）
+index_kline_daily_qfq,up_count,db_aistock,market.index_kline_daily_qfq,up_count,int,无,1.0,market.index_kline_daily_qfq 字段 up_count（上涨家数）,指数前复权日K（厘/手）
+index_kline_daily_qfq,down_count,db_aistock,market.index_kline_daily_qfq,down_count,int,无,1.0,market.index_kline_daily_qfq 字段 down_count（下跌家数）,指数前复权日K（厘/手）
+index_kline_daily_qfq,adjust_type,db_aistock,market.index_kline_daily_qfq,adjust_type,str,无,1.0,market.index_kline_daily_qfq 字段 adjust_type（复权类型，固定为 qfq）,指数前复权日K（厘/手）
+index_kline_daily_qfq,source,db_aistock,market.index_kline_daily_qfq,source,str,无,1.0,market.index_kline_daily_qfq 字段 source（tdx_api / tdx_vipdoc）,指数前复权日K（厘/手）
+
+index_kline_weekly_qfq,week_end_date,db_aistock,market.index_kline_weekly_qfq,week_end_date,str,无,1.0,market.index_kline_weekly_qfq 字段 week_end_date（周末日期 YYYY-MM-DD）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,code,db_aistock,market.index_kline_weekly_qfq,code,str,无,1.0,market.index_kline_weekly_qfq 字段 code（指数代码，如 399001.SZ）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,open_li,db_aistock,market.index_kline_weekly_qfq,open_li,float,厘,1.0,market.index_kline_weekly_qfq 字段 open_li（开盘价，单位：厘）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,high_li,db_aistock,market.index_kline_weekly_qfq,high_li,float,厘,1.0,market.index_kline_weekly_qfq 字段 high_li（最高价，单位：厘）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,low_li,db_aistock,market.index_kline_weekly_qfq,low_li,float,厘,1.0,market.index_kline_weekly_qfq 字段 low_li（最低价，单位：厘）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,close_li,db_aistock,market.index_kline_weekly_qfq,close_li,float,厘,1.0,market.index_kline_weekly_qfq 字段 close_li（收盘价，单位：厘）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,volume_hand,db_aistock,market.index_kline_weekly_qfq,volume_hand,float,手,1.0,market.index_kline_weekly_qfq 字段 volume_hand（成交量，单位：手）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,amount_li,db_aistock,market.index_kline_weekly_qfq,amount_li,float,厘,1.0,market.index_kline_weekly_qfq 字段 amount_li（成交额，单位：厘）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,up_count,db_aistock,market.index_kline_weekly_qfq,up_count,int,无,1.0,market.index_kline_weekly_qfq 字段 up_count（上涨家数）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,down_count,db_aistock,market.index_kline_weekly_qfq,down_count,int,无,1.0,market.index_kline_weekly_qfq 字段 down_count（下跌家数）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,adjust_type,db_aistock,market.index_kline_weekly_qfq,adjust_type,str,无,1.0,market.index_kline_weekly_qfq 字段 adjust_type（复权类型，固定为 qfq）,指数周前复权K（厘/手）
+index_kline_weekly_qfq,source,db_aistock,market.index_kline_weekly_qfq,source,str,无,1.0,market.index_kline_weekly_qfq 字段 source（tdx_api / tdx_vipdoc）,指数周前复权K（厘/手）
+
+index_kline_monthly_qfq,month_end_date,db_aistock,market.index_kline_monthly_qfq,month_end_date,str,无,1.0,market.index_kline_monthly_qfq 字段 month_end_date（月末日期 YYYY-MM-DD）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,code,db_aistock,market.index_kline_monthly_qfq,code,str,无,1.0,market.index_kline_monthly_qfq 字段 code（指数代码，如 399001.SZ）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,open_li,db_aistock,market.index_kline_monthly_qfq,open_li,float,厘,1.0,market.index_kline_monthly_qfq 字段 open_li（开盘价，单位：厘）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,high_li,db_aistock,market.index_kline_monthly_qfq,high_li,float,厘,1.0,market.index_kline_monthly_qfq 字段 high_li（最高价，单位：厘）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,low_li,db_aistock,market.index_kline_monthly_qfq,low_li,float,厘,1.0,market.index_kline_monthly_qfq 字段 low_li（最低价，单位：厘）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,close_li,db_aistock,market.index_kline_monthly_qfq,close_li,float,厘,1.0,market.index_kline_monthly_qfq 字段 close_li（收盘价，单位：厘）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,volume_hand,db_aistock,market.index_kline_monthly_qfq,volume_hand,float,手,1.0,market.index_kline_monthly_qfq 字段 volume_hand（成交量，单位：手）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,amount_li,db_aistock,market.index_kline_monthly_qfq,amount_li,float,厘,1.0,market.index_kline_monthly_qfq 字段 amount_li（成交额，单位：厘）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,up_count,db_aistock,market.index_kline_monthly_qfq,up_count,int,无,1.0,market.index_kline_monthly_qfq 字段 up_count（上涨家数）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,down_count,db_aistock,market.index_kline_monthly_qfq,down_count,int,无,1.0,market.index_kline_monthly_qfq 字段 down_count（下跌家数）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,adjust_type,db_aistock,market.index_kline_monthly_qfq,adjust_type,str,无,1.0,market.index_kline_monthly_qfq 字段 adjust_type（复权类型，固定为 qfq）,指数月前复权K（厘/手）
+index_kline_monthly_qfq,source,db_aistock,market.index_kline_monthly_qfq,source,str,无,1.0,market.index_kline_monthly_qfq 字段 source（tdx_api / tdx_vipdoc）,指数月前复权K（厘/手）
+stock_info,ts_code,db_aistock,market.stock_info,ts_code,str,无,1.0,market.stock_info 字段 ts_code（TS 股票代码，CHAR(9)）,证券基础信息增强（本地表）
+stock_info,name,db_aistock,market.stock_info,name,str,无,1.0,market.stock_info 字段 name（证券名称）,证券基础信息增强（本地表）
+stock_info,industry,db_aistock,market.stock_info,industry,str,无,1.0,market.stock_info 字段 industry（所属行业）,证券基础信息增强（本地表）
+stock_info,market,db_aistock,market.stock_info,market,str,无,1.0,market.stock_info 字段 market（所属市场，如主板/中小板/创业板等）,证券基础信息增强（本地表）
+stock_info,area,db_aistock,market.stock_info,area,str,无,1.0,market.stock_info 字段 area（所属地域）,证券基础信息增强（本地表）
+stock_info,list_date,db_aistock,market.stock_info,list_date,str,无,1.0,market.stock_info 字段 list_date（上市日期，DATE）,证券基础信息增强（本地表）
+stock_info,ext_json,db_aistock,market.stock_info,ext_json,json,无,1.0,market.stock_info 字段 ext_json（扩展信息 JSON）,证券基础信息增强（本地表）
+stock_info,updated_at,db_aistock,market.stock_info,updated_at,str,无,1.0,market.stock_info 字段 updated_at（更新时间 TIMESTAMPTZ）,证券基础信息增强（本地表）
+
+market_stats_snapshot,snapshot_time,db_aistock,market.market_stats_snapshot,snapshot_time,str,无,1.0,market.market_stats_snapshot 字段 snapshot_time（快照时间 TIMESTAMPTZ）,市场统计快照（本地表）
+market_stats_snapshot,stats,db_aistock,market.market_stats_snapshot,stats,json,无,1.0,market.market_stats_snapshot 字段 stats（市场统计 JSON）,市场统计快照（本地表）
+
+trade_calendar,cal_date,db_aistock,market.trading_calendar,cal_date,str,无,1.0,market.trading_calendar 字段 cal_date（日历日期，DATE）,本地交易日历表
+trade_calendar,is_open,db_aistock,market.trading_calendar,is_trading,bool,无,1.0,market.trading_calendar 字段 is_trading（是否交易日，BOOLEAN）,本地交易日历表

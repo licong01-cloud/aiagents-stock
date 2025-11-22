@@ -8,6 +8,8 @@ import re
 import zipfile
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
+import os
+import psycopg2
 
 from data_source_manager import data_source_manager
 from network_optimizer import network_optimizer
@@ -27,6 +29,16 @@ class UnifiedDataAccess:
         # 导入StockDataFetcher以兼容旧代码（用于计算技术指标）
         from stock_data import StockDataFetcher
         self.stock_data_fetcher = StockDataFetcher()
+
+        # 本地 DB 配置，用于分钟线/周线等表访问（与 ingest 脚本共用环境变量）
+        self._db_cfg = dict(
+            host=os.getenv("TDX_DB_HOST", "localhost"),
+            port=int(os.getenv("TDX_DB_PORT", "5432")),
+            user=os.getenv("TDX_DB_USER", "postgres"),
+            password=os.getenv("TDX_DB_PASSWORD", ""),
+            dbname=os.getenv("TDX_DB_NAME", "aistock"),
+        )
+        self._tdx_api_base = os.getenv("TDX_API_BASE", "http://localhost:8080")
 
     # 基础代理：直接走数据源管理器
     def get_stock_hist_data(self, symbol: str, start_date: Optional[str] = None,
@@ -630,6 +642,199 @@ class UnifiedDataAccess:
         except Exception as e:
             return {"symbol": symbol, "data_success": False, "error": str(e)}
 
+    # ------------------------------------------------------------------
+    # 分时 / 分钟线访问（本地 TimescaleDB 优先，TDX 兜底）
+    # ------------------------------------------------------------------
+
+    def get_minute_intraday(self, symbol: str, trade_date: Optional[str] = None) -> Optional[pd.DataFrame]:
+        """获取指定日期的分钟级分时数据。
+
+        优先使用本地 TimescaleDB `market.kline_minute_raw`，在历史回测和收盘后分析时
+        可严格基于指定日期的完整分钟数据；若本地不存在，则调用 TDX /api/minute 兜底。
+
+        Args:
+            symbol: 股票代码（6位或 ts_code 均可，内部自动转换为 ts_code & 6位 code）
+            trade_date: 交易日期，格式 YYYYMMDD；为空时默认使用当前交易日（由 TDX 决定）
+
+        Returns:
+            DataFrame，索引为时间（datetime），包含 Price/Volume 等标准列；若获取失败返回 None。
+        """
+
+        # 统一转换为 ts_code 与 6位代码
+        try:
+            ts_code = data_source_manager._convert_to_ts_code(symbol)
+        except Exception:
+            ts_code = symbol
+        code = (ts_code or symbol or "").split(".")[0]
+        if not code:
+            return None
+
+        if not trade_date:
+            trade_date = datetime.now().strftime("%Y%m%d")
+
+        # 尝试读取本地 TimescaleDB（仅对历史/非当天使用，盘中仍可回退到 TDX）
+        try:
+            with psycopg2.connect(**self._db_cfg) as conn:
+                with conn.cursor() as cur:
+                    target = datetime.strptime(trade_date, "%Y%m%d").date()
+                    start_dt = datetime.combine(target, time(9, 30))
+                    end_dt = datetime.combine(target, time(15, 0))
+                    cur.execute(
+                        """
+                        SELECT trade_time, close_li, volume_hand, amount_li
+                          FROM market.kline_minute_raw
+                         WHERE ts_code=%s AND trade_time >= %s AND trade_time <= %s
+                         ORDER BY trade_time
+                        """,
+                        (ts_code, start_dt, end_dt),
+                    )
+                    rows = cur.fetchall()
+            if rows:
+                df = pd.DataFrame(rows, columns=["DateTime", "Close_li", "Volume_hand", "Amount_li"])
+                df["Price"] = df["Close_li"].astype(float) / 1000.0
+                df["Volume"] = df["Volume_hand"].astype(float)
+                df["Amount"] = df["Amount_li"].astype(float) / 1000.0
+                df = df.set_index("DateTime")
+                return df
+        except Exception as e:
+            debug_logger.debug("get_minute_intraday 本地分钟数据读取失败，尝试 TDX 兜底", error=str(e), symbol=symbol, trade_date=trade_date)
+
+        # 本地无数据或读取失败时，走 TDX /api/minute
+        try:
+            url = self._tdx_api_base.rstrip("/") + "/api/minute"
+            params = {"code": code, "date": trade_date}
+            resp = requests.get(url, params=params, timeout=5)
+            resp.raise_for_status()
+            payload = resp.json()
+            if not isinstance(payload, dict) or payload.get("code") != 0:
+                return None
+            data = payload.get("data") or {}
+            items = data.get("List") or data.get("list") or []
+            if isinstance(items, dict):
+                items = items.get("List") or items.get("list") or []
+            if not isinstance(items, list) or not items:
+                return None
+            # 构造 DataFrame
+            df = pd.DataFrame(items)
+            # 标准化列名
+            time_col = "Time" if "Time" in df.columns else "time"
+            price_col = "Price" if "Price" in df.columns else "price"
+            vol_col = "Number" if "Number" in df.columns else ("Volume" if "Volume" in df.columns else "volume")
+            df = df[[time_col, price_col, vol_col]].copy()
+            target = datetime.strptime(trade_date, "%Y%m%d").date()
+            df["DateTime"] = df[time_col].apply(
+                lambda t: datetime.combine(target, datetime.strptime(str(t), "%H:%M").time())
+            )
+            df["Price"] = df[price_col].astype(float) / 1000.0
+            df["Volume"] = df[vol_col].astype(float)
+            df = df.set_index("DateTime")
+            return df
+        except Exception as e:
+            debug_logger.debug("get_minute_intraday TDX /api/minute 兜底失败", error=str(e), symbol=symbol, trade_date=trade_date)
+            return None
+
+    # ------------------------------------------------------------------
+    # 周线访问（本地周线聚合 + Tushare 兜底）
+    # ------------------------------------------------------------------
+
+    def get_weekly_hist_data(self, symbol: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[pd.DataFrame]:
+        """获取 A 股周线历史数据（前复权）。
+
+        优先使用本地 `market.kline_weekly_qfq` 聚合数据，在未覆盖的情况下再调用
+        Tushare `pro.weekly` 兜底。日期区间使用 week_end_date 进行过滤。
+        """
+
+        try:
+            ts_code = data_source_manager._convert_to_ts_code(symbol)
+        except Exception:
+            ts_code = symbol
+
+        # 统一日期范围
+        if end_date is None:
+            end_date = datetime.now().strftime("%Y%m%d")
+        if start_date is None:
+            # 默认取近一年
+            base = datetime.strptime(end_date, "%Y%m%d")
+            start_date = (base - timedelta(days=365)).strftime("%Y%m%d")
+
+        # 1. 本地周线表
+        try:
+            with psycopg2.connect(**self._db_cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT week_end_date, open_li, high_li, low_li, close_li, volume_hand, amount_li
+                          FROM market.kline_weekly_qfq
+                         WHERE ts_code=%s AND week_end_date >= %s AND week_end_date <= %s
+                         ORDER BY week_end_date
+                        """,
+                        (ts_code, start_date, end_date),
+                    )
+                    rows = cur.fetchall()
+            if rows:
+                df = pd.DataFrame(
+                    rows,
+                    columns=[
+                        "Date",
+                        "Open_li",
+                        "High_li",
+                        "Low_li",
+                        "Close_li",
+                        "Volume_hand",
+                        "Amount_li",
+                    ],
+                )
+                df["Open"] = df["Open_li"].astype(float) / 1000.0
+                df["High"] = df["High_li"].astype(float) / 1000.0
+                df["Low"] = df["Low_li"].astype(float) / 1000.0
+                df["Close"] = df["Close_li"].astype(float) / 1000.0
+                df["Volume"] = df["Volume_hand"].astype(float)
+                df["Amount"] = df["Amount_li"].astype(float) / 1000.0
+                df["Date"] = pd.to_datetime(df["Date"])
+                df = df.set_index("Date").sort_index()
+                return df
+        except Exception as e:
+            debug_logger.debug(
+                "get_weekly_hist_data 本地周线读取失败，尝试 Tushare 兜底",
+                error=str(e),
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+        # 2. Tushare weekly 兜底
+        if not data_source_manager.tushare_available:
+            return None
+        try:
+            with network_optimizer.apply():
+                df = data_source_manager.tushare_api.weekly(
+                    ts_code=ts_code,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            if df is None or df.empty:
+                return None
+            df = df.copy()
+            # 标准化列名
+            df.rename(
+                columns={
+                    "trade_date": "Date",
+                    "open": "Open",
+                    "high": "High",
+                    "low": "Low",
+                    "close": "Close",
+                    "vol": "Volume",
+                    "amount": "Amount",
+                },
+                inplace=True,
+            )
+            df["Date"] = pd.to_datetime(df["Date"])
+            df = df.set_index("Date").sort_index()
+            return df
+        except Exception as e:
+            debug_logger.debug("get_weekly_hist_data Tushare weekly 兜底失败", error=str(e), symbol=symbol)
+            return None
+
     # 预留接口（先返回占位，后续补齐具体数据源实现）
     def get_research_reports_data(self, symbol: str, days: int = 180, analysis_date: Optional[str] = None) -> Dict[str, Any]:
         """获取机构研报数据 (Tushare优先，包含研报内容，基于内容分析)
@@ -974,6 +1179,14 @@ class UnifiedDataAccess:
         session = requests.Session()
         session.headers.update({"User-Agent": "Mozilla/5.0"})
 
+        def _em_cookies() -> Dict[str, str]:
+            """构造东方财富 pdf.dfcfw.com 反爬脚本设置的 Cookie。"""
+            status = 208722705 + 1275103711 + 1998477227
+            return {
+                "__tst_status": f"{status}#",
+                "EO_Bot_Ssid": "212402176",
+            }
+
         def _cninfo_download_url(detail_url: str) -> Optional[str]:
             try:
                 parsed = urlparse(detail_url)
@@ -993,17 +1206,41 @@ class UnifiedDataAccess:
             if not url or not isinstance(url, str) or depth > 2:
                 return None
             try:
-                headers = {"User-Agent": "Mozilla/5.0"}
-                if origin_detail and depth == 0:
-                    headers["Referer"] = origin_detail
+                # 特殊处理东方财富 pdf.dfcfw.com 链接，使用反爬脚本对应的 Cookie 直接下载
+                try:
+                    parsed = urlparse(url)
+                    host = parsed.netloc.lower()
+                except Exception:
+                    host = ""
+
+                if "pdf.dfcfw.com" in host:
+                    headers_em = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0",
+                        "Accept": "application/pdf,*/*;q=0.9",
+                        "Accept-Language": "zh-CN,zh;q=0.9",
+                    }
+                    cookies_em = _em_cookies()
+                    # 不通过代理池，直接请求东财 PDF 服务器
+                    response = requests.get(
+                        url,
+                        headers=headers_em,
+                        cookies=cookies_em,
+                        timeout=20,
+                        allow_redirects=True,
+                        proxies={},
+                    )
+                else:
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    if origin_detail and depth == 0:
+                        headers["Referer"] = origin_detail
+                        with network_optimizer.apply():
+                            session.get(origin_detail, headers=headers, timeout=25, allow_redirects=True)
+                    cninfo_download = _cninfo_download_url(url)
+                    request_url = cninfo_download or url
+                    if origin_detail:
+                        headers["Referer"] = origin_detail
                     with network_optimizer.apply():
-                        session.get(origin_detail, headers=headers, timeout=25, allow_redirects=True)
-                cninfo_download = _cninfo_download_url(url)
-                request_url = cninfo_download or url
-                if origin_detail:
-                    headers["Referer"] = origin_detail
-                with network_optimizer.apply():
-                    response = session.get(request_url, headers=headers, timeout=25, allow_redirects=True)
+                        response = session.get(request_url, headers=headers, timeout=25, allow_redirects=True)
                 if response.status_code != 200:
                     debug_logger.debug("公告PDF下载失败", url=url, status=response.status_code)
                     return None
@@ -1079,23 +1316,175 @@ class UnifiedDataAccess:
             if pdf_bytes:
                 title = (ann_meta or {}).get('公告标题') or 'announcement'
                 trade_date = (ann_meta or {}).get('日期') or datetime.now().strftime('%Y-%m-%d')
-                safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
+                # 标题和日期都需要做路径安全处理，避免在Windows上包含 : 等非法字符
+                safe_title = re.sub(r'[\\/:*?"<>|]', '_', str(title))
+                safe_date = re.sub(r'[\\/:*?"<>|]', '_', str(trade_date))
                 symbol_dir = Path("data") / "announcements" / symbol
                 symbol_dir.mkdir(parents=True, exist_ok=True)
-                filename = f"{trade_date}_{safe_title}.pdf"
+                filename = f"{safe_date}_{safe_title}.pdf"
                 saved_path = str(symbol_dir / filename)
                 with open(saved_path, "wb") as f:
                     f.write(pdf_bytes)
 
             return text, saved_path
 
-        try:
-            if not data_source_manager.tushare_available:
-                data["error"] = "Tushare不可用，无法获取公告数据"
-                print("   ⚠️ 当前环境未启用Tushare，无法获取公告")
-                return data
+        def _fetch_announcements_from_eastmoney(symbol: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+            """使用东方财富公告接口作为兜底数据源，返回公告列表和PDF解析结果。"""
+            base_url = "https://np-anotice-stock.eastmoney.com/api/security/ann"
+            content_api = "https://np-cnotice-stock.eastmoney.com/api/content/ann"
 
-            ts_code = data_source_manager._convert_to_ts_code(symbol)
+            def _clean_symbol(code: str) -> str:
+                stock = code.strip()
+                if "." in stock:
+                    stock = stock.split(".")[0]
+                for prefix in ("sh", "sz", "gb_", "us", "us_"):
+                    if stock.startswith(prefix):
+                        stock = stock[len(prefix) :]
+                        break
+                return stock
+
+            headers_list = {
+                "Host": "np-anotice-stock.eastmoney.com",
+                "Referer": "https://data.eastmoney.com/notices/hsa/5.html",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0",
+            }
+
+            def _get_notices(code: str, page_size: int = 50, page_index: int = 1) -> List[Dict[str, Any]]:
+                params = {
+                    "page_size": page_size,
+                    "page_index": page_index,
+                    "ann_type": "SHA,CYB,SZA,BJA,INV",
+                    "client_source": "web",
+                    "f_node": "0",
+                    "stock_list": _clean_symbol(code),
+                }
+                resp = requests.get(base_url, params=params, headers=headers_list, timeout=15)
+                resp.raise_for_status()
+                payload = resp.json() or {}
+                return payload.get("data", {}).get("list", []) or []
+
+            def _fetch_notice_detail(art_code: str) -> Dict[str, Any]:
+                if not art_code:
+                    return {}
+                params = {"art_code": art_code, "client_source": "web"}
+                headers_detail = {
+                    "Referer": "https://data.eastmoney.com/",
+                    "User-Agent": headers_list["User-Agent"],
+                    "Accept": "application/json,text/plain,*/*",
+                }
+                try:
+                    resp = requests.get(
+                        content_api,
+                        params=params,
+                        headers=headers_detail,
+                        timeout=15,
+                        proxies={},
+                    )
+                    if resp.status_code != 200:
+                        return {}
+                    return resp.json().get("data", {}) or {}
+                except Exception as e:
+                    # 网络异常（如WinError 10055）时不影响整体公告获取，仅跳过该条详情
+                    try:
+                        debug_logger.debug(
+                            "东方财富公告详情请求失败",
+                            art_code=art_code,
+                            error=str(e),
+                        )
+                    except Exception:
+                        pass
+                    return {}
+
+            def _extract_pdf_urls(detail: Dict[str, Any]) -> List[str]:
+                urls: List[str] = []
+                if not detail:
+                    return urls
+                attaches = detail.get("attachments") or detail.get("attach_list") or []
+                for att in attaches:
+                    if not isinstance(att, dict):
+                        continue
+                    u = att.get("url") or att.get("oss_url") or att.get("file_url")
+                    if isinstance(u, str) and u.lower().endswith(".pdf"):
+                        urls.append(u)
+                for key in ("pdf_url", "em_pdf", "notice_pdf"):
+                    u = detail.get(key)
+                    if isinstance(u, str) and u.lower().endswith(".pdf"):
+                        urls.append(u)
+                # 去重
+                seen: Dict[str, None] = {}
+                result: List[str] = []
+                for u in urls:
+                    if u not in seen:
+                        seen[u] = None
+                        result.append(u)
+                return result
+
+            # 获取公告列表（单次最多50条），并限制最终数量
+            notices = _get_notices(symbol, page_size=50)
+            if not notices:
+                return [], []
+
+            # 按日期排序并截断数量
+            notices.sort(key=lambda x: x.get("notice_date", ""), reverse=True)
+            max_items = 20
+            notices = notices[: max_items]
+
+            announcements: List[Dict[str, Any]] = []
+            pdf_analysis: List[Dict[str, Any]] = []
+
+            for notice in notices:
+                stock_info = (notice.get("codes") or [{}])[0] or {}
+                art_code = notice.get("art_code") or ""
+                date_str = notice.get("notice_date") or ""
+                title = notice.get("title") or "N/A"
+                ann_type = (notice.get("columns") or [{}])[0].get("column_name", "")
+
+                ann_item: Dict[str, Any] = {
+                    "日期": date_str or "N/A",
+                    "公告标题": title,
+                    "公告类型": ann_type or "N/A",
+                    "公告摘要": "",
+                    "pdf_url": f"https://pdf.dfcfw.com/pdf/H2_{art_code}_1.pdf" if art_code else "N/A",
+                    "download_url": f"https://pdf.dfcfw.com/pdf/H2_{art_code}_1.pdf" if art_code else "N/A",
+                    "detail_url": f"https://data.eastmoney.com/notices/detail/{stock_info.get('stock_code', '')}/{art_code}.html" if art_code else "N/A",
+                    "原始数据": notice,
+                }
+
+                detail = _fetch_notice_detail(art_code)
+                pdf_urls = _extract_pdf_urls(detail)
+                if pdf_urls:
+                    ann_item["pdf_url"] = pdf_urls[0]
+                    ann_item["download_url"] = pdf_urls[0]
+
+                announcements.append(ann_item)
+
+            # 尝试下载并解析前几条公告 PDF
+            for ann in announcements[:5]:
+                pdf_url = ann.get("pdf_url")
+                analysis_entry: Dict[str, Any] = {
+                    "date": ann.get("日期"),
+                    "title": ann.get("公告标题"),
+                    "pdf_url": pdf_url,
+                    "text": None,
+                    "success": False,
+                }
+                if pdf_url and pdf_url != "N/A":
+                    pdf_text, saved_path = _download_and_parse_pdf(pdf_url, ann)
+                    if pdf_text:
+                        analysis_entry["text"] = pdf_text
+                        analysis_entry["success"] = True
+                    if saved_path:
+                        analysis_entry["saved_path"] = saved_path
+                        # 将本地保存路径写回公告条目，供前端使用本地文件下载
+                        ann["saved_path"] = saved_path
+                else:
+                    analysis_entry["text"] = "未提供PDF链接。"
+                pdf_analysis.append(analysis_entry)
+
+            return announcements, pdf_analysis
+
+        try:
+            # 统一设置查询时间范围
             if analysis_date:
                 end_dt = datetime.strptime(analysis_date, "%Y%m%d")
             else:
@@ -1106,7 +1495,26 @@ class UnifiedDataAccess:
             end_date_str = end_dt.strftime("%Y%m%d")
             data["date_range"] = {"start": start_date_str, "end": end_date_str}
 
-            print("   [Tushare] 正在查询公告数据 (anns_d 接口)...")
+            # 1) 首选东方财富公告接口作为主数据源
+            print("   [Eastmoney] 正在通过东方财富公告接口获取数据...")
+            anns_em, pdf_em = _fetch_announcements_from_eastmoney(symbol)
+            if anns_em:
+                data["announcements"] = anns_em
+                data["pdf_analysis"] = pdf_em
+                data["source"] = "eastmoney"
+                data["data_success"] = True
+                data["count"] = len(anns_em)
+                return data
+
+            # 2) 东方财富无数据时，再尝试 Tushare anns_d 作为兜底（列表为主，PDF 下载尽力而为）
+            if not data_source_manager.tushare_available:
+                data["error"] = "东方财富公告接口无数据且Tushare不可用"
+                print("   ⚠️ 东方财富公告接口无数据，且当前环境未启用Tushare")
+                return data
+
+            ts_code = data_source_manager._convert_to_ts_code(symbol)
+
+            print("   [Tushare] 东方财富无数据，尝试通过Tushare anns_d 获取公告列表...")
             all_rows: List[pd.DataFrame] = []
             limit = 50
             offset = 0
@@ -1130,8 +1538,8 @@ class UnifiedDataAccess:
                 offset += limit
 
             if not all_rows:
-                print("   ℹ️ 未查询到公告数据")
-                data["error"] = "未查询到公告数据"
+                print("   ℹ️ 东方财富与Tushare均未查询到公告数据")
+                data["error"] = "东方财富与Tushare均未查询到公告数据"
                 return data
 
             df = pd.concat(all_rows, ignore_index=True)
@@ -1162,8 +1570,8 @@ class UnifiedDataAccess:
                 announcements.append(announcement)
 
             if not announcements:
-                data["error"] = "公告数据为空"
-                print("   ℹ️ 公告数据为空")
+                print("   ℹ️ Tushare 公告数据为空")
+                data["error"] = "东方财富公告接口无数据且Tushare公告数据为空"
                 return data
 
             data["announcements"] = announcements

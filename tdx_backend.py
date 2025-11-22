@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 
 import psycopg2
 import psycopg2.extras as pgx
+from psycopg2.pool import SimpleConnectionPool
 from fastapi import FastAPI, HTTPException, Path, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -37,6 +38,10 @@ pgx.register_uuid()
 
 load_dotenv(override=True)
 HOTBOARD_PERF = os.getenv("HOTBOARD_PERF_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
+
+# Global connection pool for this backend process only (web/UI layer).
+# Batch ingestion scripts keep using their own psycopg2 connections.
+_DB_POOL: SimpleConnectionPool | None = None
 
 
 def _perf_log_hotboard(name: str, **kwargs: Any) -> None:
@@ -73,22 +78,80 @@ def _isoformat(value: Optional[dt.datetime]) -> Optional[str]:
         return value.replace(tzinfo=dt.timezone.utc).isoformat()
     return value.astimezone(dt.timezone.utc).isoformat()
 
+def _db_cfg() -> dict:
+    """Build DB config from env/DEFAULT_DB_CFG.
 
-@contextmanager
-def get_conn():
-    db_cfg = {
+    单独封装便于在直连和连接池两种模式下复用。"""
+
+    return {
         "host": os.getenv("TDX_DB_HOST", DEFAULT_DB_CFG["host"]),
         "port": int(os.getenv("TDX_DB_PORT", DEFAULT_DB_CFG["port"])),
         "user": os.getenv("TDX_DB_USER", DEFAULT_DB_CFG["user"]),
         "password": os.getenv("TDX_DB_PASSWORD", DEFAULT_DB_CFG["password"]),
         "dbname": os.getenv("TDX_DB_NAME", DEFAULT_DB_CFG["dbname"]),
     }
-    conn = psycopg2.connect(**db_cfg)
-    conn.autocommit = True
+
+
+def init_db_pool(minconn: int = 1, maxconn: int = 10) -> None:
+    """Initialize global psycopg2 connection pool for this backend process.
+
+    仅在 Web/FastAPI 进程中使用连接池，批量入库脚本保持原有直连模式。
+    """
+
+    global _DB_POOL
+    if _DB_POOL is not None:
+        return
+    cfg = _db_cfg()
     try:
+        _DB_POOL = SimpleConnectionPool(minconn, maxconn, **cfg)
+    except Exception as exc:  # noqa: BLE001
+        # 若连接池初始化失败，为避免服务整体不可用，退回到按需直连模式。
+        print(f"[DB] init_db_pool failed, fallback to direct connect: {exc}")
+        _DB_POOL = None
+
+
+def close_db_pool() -> None:
+    """Close all connections in the global pool (if any)."""
+
+    global _DB_POOL
+    if _DB_POOL is not None:
+        try:
+            _DB_POOL.closeall()
+        except Exception:
+            pass
+        _DB_POOL = None
+
+
+@contextmanager
+def get_conn():
+    """Yield a DB connection, using pool when available.
+
+    - Web/UI 层优先使用全局连接池，减少建连开销、限制最大连接数；
+    - 若池未初始化或初始化失败，则退回到临时直连模式，保持兼容性。
+    """
+
+    global _DB_POOL
+
+    if _DB_POOL is None:
+        # Fallback: one-off connection, behaviour与原实现一致。
+        conn = psycopg2.connect(**_db_cfg())
+        conn.autocommit = True
+        try:
+            yield conn
+        finally:
+            conn.close()
+        return
+
+    conn = _DB_POOL.getconn()
+    try:
+        conn.autocommit = True
         yield conn
     finally:
-        conn.close()
+        try:
+            _DB_POOL.putconn(conn)
+        except Exception:
+            # 若 put 失败，不影响主流程，连接由池自行回收或丢弃。
+            pass
 
 
 def _fetchall(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
@@ -657,6 +720,12 @@ def get_app() -> FastAPI:
     @app.on_event("startup")
     def _startup() -> None:  # noqa: D401
         """Start the background scheduler on service boot."""
+        # Initialize DB connection pool for this backend process
+        try:
+            init_db_pool(minconn=1, maxconn=10)
+        except Exception:
+            # Pool init failure is non-fatal; code will fall back to direct connections.
+            pass
         scheduler.start()
         if (os.getenv("TDX_CREATE_DEFAULT_SCHEDULES", "0").lower() in {"1", "true", "yes", "on"}):
             try:
@@ -679,6 +748,11 @@ def get_app() -> FastAPI:
         scheduler.shutdown(wait=False)
         try:
             _hotboard_stop.set()
+        except Exception:
+            pass
+        # Close DB connection pool if any
+        try:
+            close_db_pool()
         except Exception:
             pass
 
@@ -802,7 +876,12 @@ def get_app() -> FastAPI:
     def _ensure_default_ingestion_schedules() -> List[Dict[str, Any]]:
         defaults = [
             ("kline_daily_qfq", "incremental", "daily", True, {}),
+            ("kline_daily_raw", "incremental", "daily", True, {}),
             ("kline_minute_raw", "incremental", "10m", True, {}),
+            # Tushare 个股资金流增量，同步逻辑由脚本内部根据 trade_date 游标推进
+            ("stock_moneyflow", "incremental", "daily", True, {}),
+            # Weekly aggregation from daily QFQ，默认按日检查是否有新日线可聚合
+            ("kline_weekly", "incremental", "daily", True, {}),
         ]
         items: List[Dict[str, Any]] = []
         for ds, md, freq, en, opts in defaults:
@@ -853,29 +932,10 @@ def get_app() -> FastAPI:
         summary = {"dataset": payload.dataset, "mode": payload.mode, **(payload.options or {})}
         job_type = "init" if payload.mode == "init" else "incremental"
         job_id = _create_job(job_type, summary)
-        opts = dict(payload.options or {})
-        opts["job_id"] = str(job_id)
-        run_id = scheduler.run_ingestion_now(
-            dataset=payload.dataset,
-            mode=payload.mode,
-            triggered_by=payload.triggered_by,
-            options=opts,
-        )
-        return {"run_id": str(run_id), "job_id": str(job_id)}
-
-    @app.post("/api/adjust/rebuild")
-    def trigger_adjust_rebuild(payload: AdjustRebuildRequest) -> Dict[str, Any]:
         options = dict(payload.options or {})
-        summary = {"dataset": "adjust_daily", "mode": "rebuild", **options}
-        job_id = _create_job("init", summary)
         options["job_id"] = str(job_id)
-        run_id = scheduler.run_ingestion_now(
-            dataset="adjust_daily",
-            mode="rebuild",
-            triggered_by="api",
-            options=options,
-        )
-        return {"run_id": str(run_id), "job_id": str(job_id)}
+        run_id = scheduler.run_ingestion_now(dataset=payload.dataset, mode=payload.mode, triggered_by="api", options=options)
+        return {"job_id": str(job_id), "run_id": str(run_id)}
 
     @app.get("/api/ingestion/schedule")
     def list_ingestion_schedules() -> Dict[str, Any]:
@@ -979,6 +1039,52 @@ def get_app() -> FastAPI:
                 (limit,),
             )
         return {"items": [_serialize_ingestion_log(row) for row in rows]}
+
+    # ------------------------------------------------------------------
+    # Data statistics endpoints (local DB dashboard)
+
+    @app.post("/api/data-stats/refresh")
+    def refresh_data_stats() -> Dict[str, Any]:
+        """Trigger data statistics refresh via market.refresh_data_stats().
+
+        该接口调用数据库中的存储过程，对已配置的数据表进行统计并
+        更新 market.data_stats 表。前端“数据看板”应在刷新成功后重新
+        调用 /api/data-stats 获取最新统计信息。
+        """
+
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT market.refresh_data_stats();")
+            return {"success": True}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"refresh_data_stats failed: {exc}") from exc
+
+    @app.get("/api/data-stats")
+    def list_data_stats() -> Dict[str, Any]:
+        """List current data statistics from market.data_stats.
+
+        仅从统计表读取数据，不直接扫描业务大表，便于在页面中快速展示
+        各类数据的时间范围、行数和空间占用等信息。
+        """
+
+        rows = _fetchall(
+            """
+            SELECT data_kind,
+                   table_name,
+                   min_date,
+                   max_date,
+                   row_count,
+                   table_bytes,
+                   index_bytes,
+                   last_updated_at,
+                   stat_generated_at,
+                   extra_info
+              FROM market.data_stats
+             ORDER BY data_kind
+            """
+        )
+        return {"items": rows}
 
     # ------------------------------------------------------------------
     # Hotboard endpoints

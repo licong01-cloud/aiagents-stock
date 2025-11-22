@@ -1,0 +1,12 @@
+﻿数据集,规范字段名,中文字段名,数据类型,单位,小数位数,默认格式,字段说明,TDX字段名,Tushare_DAILY字段名,Tushare_PRO_BAR字段名,本地DB字段名,其他数据源字段名,备注
+kline_daily,amount,成交额 （千元）,float,万,2,%.2f,成交额 （千元）,,amount,,,,
+kline_daily,change,涨跌额,float,元,3,%.3f,涨跌额,,change,,,,
+kline_daily,close,收盘价,float,元,3,%.3f,收盘价,,close,,,,
+kline_daily,high,最高价,float,元,3,%.3f,最高价,,high,,,,
+kline_daily,low,最低价,float,元,3,%.3f,最低价,,low,,,,
+kline_daily,open,开盘价,float,元,3,%.3f,开盘价,,open,,,,
+kline_daily,pct_chg,涨跌幅 【基于除权后的昨收计算的涨跌幅：（今收-除权昨收）/除权昨收 】,float,%,2,%.2f,涨跌幅 【基于除权后的昨收计算的涨跌幅：（今收-除权昨收）/除权昨收 】,,pct_chg,,,,
+kline_daily,pre_close,昨收价【除权价，前复权】,float,元,3,%.3f,昨收价【除权价，前复权】,,pre_close,,,,
+kline_daily,trade_date,交易日期,str,无,0,YYYY-MM-DD,交易日期,,trade_date,,,,
+kline_daily,ts_code,股票代码,str,无,0,,股票代码,,ts_code,,,,
+kline_daily,vol,成交量 （手）,float,手,0,%.0f,成交量 （手）,,vol,,,,

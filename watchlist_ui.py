@@ -113,7 +113,7 @@ def _format_datetime(value: Any) -> str:
                 return text
     else:
         return str(value)
-    return dt.strftime("%Y-%m-%d:%H:%M:%S")
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _fetch_quotes_live(codes: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -491,6 +491,8 @@ def display_watchlist_manager():
     st.session_state.setdefault("watchlist_page_size", 20)
     st.session_state.setdefault("watchlist_category_id", None)
     st.session_state.setdefault("watchlist_auto_refresh", False)
+    # 自动刷新频率（秒）：默认 5 秒，可选 5/10/20/30 秒、1/5/10 分钟
+    st.session_state.setdefault("watchlist_refresh_interval", 5)
     st.session_state.setdefault("watchlist_search_active", False)
 
     # 分类区
@@ -692,6 +694,26 @@ def display_watchlist_manager():
         page_size = st.selectbox("每页条数", options=[10, 20, 50, 100], index=[10, 20, 50, 100].index(st.session_state.watchlist_page_size))
     with colc4:
         auto_refresh = st.toggle("自动刷新", value=st.session_state.watchlist_auto_refresh)
+        # 自动刷新频率选择，仅在开启自动刷新时生效
+        interval_label_to_seconds = {
+            "5 秒": 5,
+            "10 秒": 10,
+            "20 秒": 20,
+            "30 秒": 30,
+            "1 分钟": 60,
+            "5 分钟": 300,
+            "10 分钟": 600,
+        }
+        # 反查当前秒数对应的标签
+        current_interval = st.session_state.get("watchlist_refresh_interval", 5)
+        current_label = next((k for k, v in interval_label_to_seconds.items() if v == current_interval), "5 秒")
+        interval_label = st.selectbox(
+            "刷新频率",
+            options=list(interval_label_to_seconds.keys()),
+            index=list(interval_label_to_seconds.keys()).index(current_label),
+            key="watchlist_refresh_interval_label",
+        )
+        st.session_state.watchlist_refresh_interval = interval_label_to_seconds.get(interval_label, 5)
     with colc5:
         if st.button("刷新"):
             st.cache_data.clear()
@@ -924,15 +946,12 @@ def display_watchlist_manager():
         quotes = _fetch_quotes_cached(codes)
         items_display = _sort_items(items, quotes, sort_by, sort_dir)
 
-    # 自动刷新
-    if auto_refresh:
-        st.rerun()
-
     st.markdown("#### 自选股票列表")
     # 单列布局：左表包含 历史/分析 两列
     st.session_state.watchlist_items_current = items_display
     with st.container():
         # 构建 DataFrame（仅含表内选择列）
+        # selected_ids_prev 用于在重绘时恢复已选中的股票，支持多次点击累积选择
         selected_ids_prev: List[int] = st.session_state.get("watchlist_selected_ids", [])
         rows: List[Dict[str, Any]] = []
         for it in items_display:
@@ -951,12 +970,12 @@ def display_watchlist_manager():
                 "代码": _display_code(it["code"]),
                 "名称": it["name"],
                 "分类": it.get("category_names") or "-",
-                "最新价": None if rt["last"] is None else float(f"{rt['last']:.2f}"),
-                "涨幅%": None if rt["pct_change"] is None else float(f"{rt['pct_change']:.2f}"),
-                "开盘": None if rt["open"] is None else float(f"{rt['open']:.2f}"),
-                "昨收": None if rt["prev_close"] is None else float(f"{rt['prev_close']:.2f}"),
-                "最高": None if rt["high"] is None else float(f"{rt['high']:.2f}"),
-                "最低": None if rt["low"] is None else float(f"{rt['low']:.2f}"),
+                "最新价": None if rt["last"] is None else float(f"{rt['last']:.3f}"),
+                "涨幅%": None if rt["pct_change"] is None else float(f"{rt['pct_change']:.3f}"),
+                "开盘": None if rt["open"] is None else float(f"{rt['open']:.3f}"),
+                "昨收": None if rt["prev_close"] is None else float(f"{rt['prev_close']:.3f}"),
+                "最高": None if rt["high"] is None else float(f"{rt['high']:.3f}"),
+                "最低": None if rt["low"] is None else float(f"{rt['low']:.3f}"),
                 "成交量(手)": None if rt["volume_hand"] is None else float(f"{rt['volume_hand']:.0f}"),
                 "成交额": _format_amount(rt.get("amount")),
                 "投资评级": it.get("last_rating") or "N/A",
@@ -974,12 +993,12 @@ def display_watchlist_manager():
                 "代码": st.column_config.TextColumn("代码", width="small"),
                 "名称": st.column_config.TextColumn("名称", width="small"),
                 "分类": st.column_config.TextColumn("分类", width="small"),
-                "最新价": st.column_config.NumberColumn("最新价", format="%.2f"),
-                "涨幅%": st.column_config.NumberColumn("涨幅%", format="%.2f"),
-                "开盘": st.column_config.NumberColumn("开盘", format="%.2f"),
-                "昨收": st.column_config.NumberColumn("昨收", format="%.2f"),
-                "最高": st.column_config.NumberColumn("最高", format="%.2f"),
-                "最低": st.column_config.NumberColumn("最低", format="%.2f"),
+                "最新价": st.column_config.NumberColumn("最新价", format="%.3f"),
+                "涨幅%": st.column_config.NumberColumn("涨幅%", format="%.3f"),
+                "开盘": st.column_config.NumberColumn("开盘", format="%.3f"),
+                "昨收": st.column_config.NumberColumn("昨收", format="%.3f"),
+                "最高": st.column_config.NumberColumn("最高", format="%.3f"),
+                "最低": st.column_config.NumberColumn("最低", format="%.3f"),
                 "成交量(手)": st.column_config.NumberColumn("成交量(手)", format="%.0f"),
                 "成交额": st.column_config.TextColumn("成交额"),
                 "投资评级": st.column_config.TextColumn("投资评级"),
@@ -994,10 +1013,18 @@ def display_watchlist_manager():
             key=editor_key,
         )
         # 更新选择结果 & 触发行内动作
-        new_selected_ids: List[int] = []
+        # 对于左侧“选择”列：以 session_state 中的已选 ID 为基准，
+        # 再累加本次交互中勾选的行，避免因重绘丢失之前的多选结果。
+        new_selected_set = set(selected_ids_prev)
         for idx, row in edited.iterrows():
+            rid = items_display[idx]["id"]
             if bool(row.get("选择")):
-                new_selected_ids.append(items_display[idx]["id"])
+                # 勾选则加入选中集合
+                new_selected_set.add(rid)
+            else:
+                # 取消勾选则从集合中移除
+                if rid in new_selected_set:
+                    new_selected_set.remove(rid)
             if bool(row.get("历史")):
                 code = items_display[idx]["code"]
                 code6 = data_source_manager._convert_from_ts_code(code) if "." in code else code
@@ -1017,7 +1044,8 @@ def display_watchlist_manager():
                 st.session_state.prefill_stock_code = code6
                 st.session_state['watchlist_editor_key'] = int(time.time())
                 st.rerun()
-        st.session_state.watchlist_selected_ids = new_selected_ids
+        # 将累积后的选择写回 session_state，保持多选
+        st.session_state.watchlist_selected_ids = list(new_selected_set)
 
     # 分页器
     total_pages = max(1, (total + page_size - 1) // page_size)
@@ -1033,6 +1061,17 @@ def display_watchlist_manager():
         if st.button("下一页", disabled=(page >= total_pages)):
             st.session_state.watchlist_page = min(total_pages, page + 1)
             st.rerun()
+
+    # 自动刷新：按照用户选择的频率等待后重绘
+    # 始终以 session_state 中最新的开关为准，避免使用过期的局部变量
+    if st.session_state.get("watchlist_auto_refresh", False):
+        try:
+            interval_sec = int(st.session_state.get("watchlist_refresh_interval", 5))
+        except Exception:
+            interval_sec = 5
+        if interval_sec > 0:
+            time.sleep(interval_sec)
+        st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.divider()

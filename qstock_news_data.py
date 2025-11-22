@@ -174,38 +174,39 @@ class QStockNewsDataFetcher:
                 except Exception as e:
                     print(f"   ⚠ 从新浪财经获取失败: {e}")
             
-            # 方法3: 尝试获取财联社电报
+            # 方法3: 尝试获取财联社电报（使用最新的 stock_info_global_cls 接口）
             if not news_items or len(news_items) < 5:
                 try:
-                    # stock_news_cls() - 财联社电报
+                    # 根据 AkShare 文档：stock_info_global_cls(symbol="全部") - 财联社电报
                     with network_optimizer.apply():
-                        df = ak.stock_news_cls()
-                    
-                    if df is not None and not df.empty:
-                        # 筛选包含股票代码或名称的新闻
-                        df_filtered = df[
-                            df['内容'].str.contains(symbol, na=False) |
-                            df['标题'].str.contains(symbol, na=False)
-                        ]
-                        
+                        df_cls = ak.stock_info_global_cls(symbol="全部")
+
+                    if df_cls is not None and not df_cls.empty:
+                        # 优先按标题包含股票代码过滤；如有内容列再一并过滤
+                        cond = df_cls['标题'].astype(str).str.contains(symbol, na=False)
+                        if '内容' in df_cls.columns:
+                            cond = cond | df_cls['内容'].astype(str).str.contains(symbol, na=False)
+
+                        df_filtered = df_cls[cond]
+
                         if not df_filtered.empty:
                             print(f"   ✓ 从财联社获取到 {len(df_filtered)} 条相关新闻")
-                            
+
                             for idx, row in df_filtered.head(self.max_items - len(news_items)).iterrows():
                                 item = {'source': '财联社'}
-                                
+
                                 for col in df_filtered.columns:
                                     value = row.get(col)
                                     if value is None or (isinstance(value, float) and pd.isna(value)):
                                         continue
                                     try:
                                         item[col] = str(value)
-                                    except:
+                                    except Exception:
                                         item[col] = "无法解析"
-                                
+
                                 if len(item) > 1:
                                     news_items.append(item)
-                
+
                 except Exception as e:
                     print(f"   ⚠ 从财联社获取失败: {e}")
             

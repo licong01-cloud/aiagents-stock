@@ -341,8 +341,14 @@ def render_monitor_tasks():
                 
                 # 注意：在form内部，复选框的变化要到提交后才能看到
                 # 所以持仓输入框始终显示，用户可以选择填写或不填写
-                position_cost = st.number_input("持仓成本(元)", min_value=0.01, value=10.0, step=0.01,
-                                               help="如果已持仓，填写买入时的成本价格（未持仓可忽略）")
+                position_cost = st.number_input(
+                    "持仓成本(元)",
+                    min_value=0.001,
+                    value=10.0,
+                    step=0.001,
+                    format="%.3f",
+                    help="如果已持仓，填写买入时的成本价格（未持仓可忽略）",
+                )
                 position_quantity = st.number_input("持仓数量(股)", min_value=100, value=100, step=100,
                                                    help="如果已持仓，填写持有的股票数量（未持仓可忽略）")
             

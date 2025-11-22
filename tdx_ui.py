@@ -29,6 +29,8 @@ def _render_init_tab() -> None:
                 "tdx_board_index": "通达信板块信息",
                 "tdx_board_member": "通达信板块成分",
                 "tdx_board_daily": "通达信板块行情",
+                "kline_weekly": "周线（由本地日线QFQ聚合）",
+                "stock_moneyflow": "个股资金流（Tushare moneyflow_ind_dc）",
                 "tushare_trade_cal": "交易日历（Tushare trade_cal 同步）",
             }
         dataset = st.selectbox(
@@ -145,11 +147,14 @@ FREQUENCY_CHOICES: List[tuple[str, str]] = [
 
 INGESTION_DATASETS: Dict[str, str] = {
     "kline_daily_qfq": "日线（前复权）",
+    "kline_daily_raw": "日线（未复权 RAW）",
     "kline_minute_raw": "1 分钟原始",
+    "kline_weekly": "周线（由日线QFQ聚合）",
     "tdx_board_all": "通达信板块（信息+成分+行情）",
     "tdx_board_index": "通达信板块信息",
     "tdx_board_member": "通达信板块成分",
     "tdx_board_daily": "通达信板块行情",
+    "stock_moneyflow": "个股资金流（moneyflow_ind_dc）",
 }
 
 
@@ -158,7 +163,17 @@ def _backend_request(method: str, path: str, **kwargs) -> Dict[str, Any]:
     url = base + path
     timeout = kwargs.pop("timeout", 30)
     resp = requests.request(method, url, timeout=timeout, **kwargs)
-    resp.raise_for_status()
+    # 遇到错误时，将响应内容一并抛出，便于在页面看到后端返回的 detail
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:  # noqa: BLE001
+        # 尽量包含后端返回的文本，帮助定位 FastAPI 抛出的 detail
+        content = None
+        try:
+            content = resp.text
+        except Exception:  # noqa: BLE001
+            content = None
+        raise Exception(f"Backend HTTP {resp.status_code} for {url}: {content}") from exc
     if resp.content:
         return resp.json()
     return {}
@@ -235,6 +250,7 @@ def _render_incremental_tab() -> None:
                 "tdx_board_index": "通达信板块信息",
                 "tdx_board_member": "通达信板块成分",
                 "tdx_board_daily": "通达信板块行情",
+                "stock_moneyflow": "个股资金流（按交易日增量，默认最近3个自然日）",
                 "tushare_trade_cal": "交易日历（Tushare trade_cal 同步）",
             }
         dataset = st.selectbox(
@@ -278,8 +294,18 @@ def _render_incremental_tab() -> None:
                         resp = _backend_request("POST", "/api/calendar/sync", json=payload)
                         st.success(f"已同步：{int(resp.get('inserted_or_updated') or 0)} 条")
                     else:
+                        # 对于 Tushare 个股资金流，若未指定覆盖起始日期，则默认使用 [date-2, date] 三个自然日窗口
+                        if dataset == "stock_moneyflow" and not start_date:
+                            try:
+                                end_dt = dt.date.fromisoformat(date)
+                                default_start = (end_dt - dt.timedelta(days=2)).isoformat()
+                            except Exception:  # noqa: BLE001
+                                default_start = date
+                            effective_start = default_start
+                        else:
+                            effective_start = (start_date or None)
                         opts = {
-                            "start_date": (start_date or None),
+                            "start_date": effective_start,
                             "end_date": date,
                             "batch_size": int(batch_size),
                         }
@@ -494,6 +520,10 @@ def _render_task_monitor() -> None:
             cat = "复权计算"
         elif ds.startswith("tdx_board_"):
             cat = "板块数据"
+        elif ds in {"kline_weekly", "kline_weekly_qfq"}:
+            cat = "周线聚合"
+        elif ds == "stock_moneyflow":
+            cat = "资金流数据"
         percent = int(job.get("progress") or 0)
         counters = job.get("counters") or {}
         error_samples = job.get("error_samples") or []
@@ -517,6 +547,10 @@ def _render_task_monitor() -> None:
                 source_label = "Tushare 复权因子"
             elif ds_lower.startswith("tdx_board_"):
                 source_label = "TDX 板块数据"
+            elif ds_lower in {"kline_weekly", "kline_weekly_qfq"}:
+                source_label = "本地周线聚合（日线QFQ）"
+            elif ds_lower == "stock_moneyflow":
+                source_label = "Tushare 个股资金流"
 
             start_date = summary.get("start_date") or summary.get("start") or summary.get("date_from")
             end_date = summary.get("end_date") or summary.get("end") or summary.get("date_to")
@@ -857,6 +891,67 @@ def _render_calendar_tab() -> None:
         except Exception as exc:  # noqa: BLE001
             _render_backend_error(exc)
 
+
+def _render_data_stats_tab() -> None:
+    st.subheader("📊 数据看板（统计总览）")
+    cols = st.columns([1, 3])
+    with cols[0]:
+        if st.button("刷新统计数据", type="primary", key="data_stats_refresh"):
+            try:
+                _backend_request("POST", "/api/data-stats/refresh", timeout=30)
+                st.success("统计任务已触发，请稍后查看结果。")
+                st.rerun()
+            except Exception as exc:  # noqa: BLE001
+                _render_backend_error(exc)
+    with cols[1]:
+        st.caption("说明：统计数据来自后台预计算表 `market.data_stats`，适合快速查看各类数据的时间范围、条数和更新时间。")
+
+    try:
+        with st.spinner("正在加载统计数据..."):
+            payload = _backend_request("GET", "/api/data-stats", timeout=15)
+    except Exception as exc:  # noqa: BLE001
+        _render_backend_error(exc)
+        return
+
+    items = payload.get("items") or payload.get("rows") or []
+    if not items:
+        st.info("当前没有统计数据，请先执行一次刷新。")
+        return
+
+    df_rows: list[dict[str, Any]] = []
+    for it in items:
+        extra = it.get("extra_info") or {}
+        if not isinstance(extra, dict):
+            extra = {}
+        # 组装最后更新时间显示值：仅使用 last_updated_at；若为空则不显示具体时间
+        last_raw = it.get("last_updated_at")
+        last_disp = "—"
+        if last_raw is not None:
+            try:
+                # 使用已有的 _iso 辅助函数，将 ISO 字符串规范化为 "YYYY-MM-DD HH:MM:SS"（上海时区）
+                last_disp = _iso(str(last_raw))
+            except Exception:
+                last_disp = str(last_raw)
+        df_rows.append(
+            {
+                # data_kind 是逻辑数据集键，例如 kline_daily_qfq
+                "类别": it.get("data_kind") or it.get("kind") or "—",
+                # 描述优先来自 extra_info.desc，其次兼容旧字段
+                "描述": extra.get("desc") or it.get("label") or it.get("description") or "—",
+                "记录数": it.get("row_count") or it.get("rows") or 0,
+                # 后端 tdx_backend.list_data_stats 返回的字段名为 min_date/max_date/last_updated_at
+                # 为兼容未来可能的调整，仍然保留旧 key 兜底
+                "起始日期": it.get("min_date") or it.get("date_min") or it.get("start_date") or "—",
+                "结束日期": it.get("max_date") or it.get("date_max") or it.get("end_date") or "—",
+                # 最后更新时间：格式化为带时分秒的本地时间字符串
+                "最后更新时间": last_disp,
+                "表名": it.get("table_name") or it.get("table") or "—",
+            }
+        )
+
+    df = pd.DataFrame(df_rows)
+    st.dataframe(df, use_container_width=True)
+
 def show_local_data_management() -> None:
     """Render the Local Data Management dashboard."""
     st.title("🗄️ 本地数据管理")
@@ -877,7 +972,7 @@ def show_local_data_management() -> None:
 
     tab = st.radio(
         "选择功能",
-        ["初始化", "增量", "复权生成", "任务监视器", "数据源测试", "数据入库调度", "运行日志"],
+        ["初始化", "增量", "复权生成", "任务监视器", "数据看板", "数据源测试", "数据入库调度", "运行日志"],
         horizontal=True,
         key="local_data_tab",
     )
@@ -890,6 +985,8 @@ def show_local_data_management() -> None:
         _render_adjust_tab()
     elif tab == "任务监视器":
         _render_task_monitor()
+    elif tab == "数据看板":
+        _render_data_stats_tab()
     elif tab == "数据源测试":
         _render_testing_tab()
     elif tab == "数据入库调度":
